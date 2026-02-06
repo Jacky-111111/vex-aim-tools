@@ -159,6 +159,12 @@ class Celeste(StateMachineProgram):
         self.robot.openai_client.set_preamble(new_preamble)
         self.picked_up_handler = self.picked_up_celeste
         self.put_down_handler = self.put_down_celeste
+        self.domino_state = None
+        self.domino_player_hand = []
+        self.domino_opponent_hand = []
+        self.domino_pending_domino = None
+        self.domino_last_move = None
+        self.domino_last_mover = None
         super().start()
 
     class CheckResponse(StateNode):
@@ -353,6 +359,226 @@ class Celeste(StateMachineProgram):
             self.score = event.data[event.data.find(' ')+1:]
             super().start()
 
+    DOMINO_WORDS = {
+        'zero': 0,
+        'one': 1,
+        'two': 2,
+        'three': 3,
+        'four': 4,
+        'five': 5,
+        'six': 6,
+        'seven': 7,
+        'eight': 8,
+        'nine': 9,
+    }
+    DOMINO_TOKEN_RE = re.compile(r'\d+|blank|zero|one|two|three|four|five|six|seven|eight|nine')
+    DOMINO_DOUBLE_RE = re.compile(r'\bdouble\s+(\w+)\b')
+
+    def _extract_domino_numbers(self, text):
+        if text is None:
+            return []
+        normalized = text.lower()
+        normalized = re.sub(r'[-|/]', ' ', normalized)
+        normalized = self.DOMINO_DOUBLE_RE.sub(r'\1 \1', normalized)
+        tokens = self.DOMINO_TOKEN_RE.findall(normalized)
+        numbers = []
+        for token in tokens:
+            if token.isdigit():
+                numbers.append(int(token))
+            else:
+                numbers.append(self.DOMINO_WORDS[token])
+        return numbers
+
+    def parse_domino_list(self, text):
+        numbers = self._extract_domino_numbers(text)
+        if len(numbers) < 2 or len(numbers) % 2 != 0:
+            return None
+        return [Domino(numbers[i], numbers[i+1]) for i in range(0, len(numbers), 2)]
+
+    def parse_domino_side(self, text):
+        if text is None:
+            return None
+        lowered = text.lower()
+        if 'left' in lowered:
+            return 'left'
+        if 'right' in lowered:
+            return 'right'
+        return None
+
+    def parse_domino_move(self, text):
+        if text is None:
+            return ("invalid", None, None)
+        lowered = text.lower()
+        if re.search(r'\b(pass|skip|no move)\b', lowered):
+            return ("pass", None, None)
+        numbers = self._extract_domino_numbers(lowered)
+        if len(numbers) < 2:
+            return ("invalid", None, None)
+        domino = Domino(numbers[0], numbers[1])
+        side = self.parse_domino_side(lowered)
+        if side is None:
+            if not self.domino_state or not self.domino_state.board:
+                side = "right"
+            else:
+                left_end, right_end = self.domino_state.board_ends()
+                match_left = domino.matches(left_end)
+                match_right = domino.matches(right_end)
+                if match_left and not match_right:
+                    side = "left"
+                elif match_right and not match_left:
+                    side = "right"
+                else:
+                    return ("need_side", domino, None)
+        return ("move", domino, side)
+
+    def choose_domino_move(self, moves):
+        return max(moves, key=lambda move: move.oriented().left + move.oriented().right)
+
+    def describe_domino(self, domino):
+        high = max(domino.left, domino.right)
+        low = min(domino.left, domino.right)
+        return f"{high}-{low}"
+
+    class ParsePlayerHand(StateNode):
+        def start(self, event):
+            super().start(event)
+            text = getattr(event, 'string', '')
+            hand = self.parent.parse_domino_list(text)
+            if not hand:
+                self.post_failure()
+                return
+            self.parent.domino_player_hand = hand
+            self.post_data('ok')
+
+    class ParseOpponentHand(StateNode):
+        def start(self, event):
+            super().start(event)
+            text = getattr(event, 'string', '')
+            hand = self.parent.parse_domino_list(text)
+            if not hand:
+                self.post_failure()
+                return
+            self.parent.domino_opponent_hand = hand
+            self.post_data('ok')
+
+    class BuildDominoGame(StateNode):
+        def start(self, event=None):
+            super().start(event)
+            self.parent.domino_state = DominoBlockGameState(
+                player_hand=self.parent.domino_player_hand,
+                opponent_hand=self.parent.domino_opponent_hand,
+                board=[],
+                current_player="player",
+            )
+            self.parent.domino_pending_domino = None
+            self.parent.domino_last_move = None
+            self.parent.domino_last_mover = None
+            starter = self.parent.domino_state.who_goes_first()
+            self.post_data(starter)
+
+    class ParsePlayerMove(StateNode):
+        def start(self, event):
+            super().start(event)
+            if not self.parent.domino_state:
+                self.post_failure()
+                return
+            kind, domino, side = self.parent.parse_domino_move(getattr(event, 'string', ''))
+            if kind == "pass":
+                self.parent.domino_last_move = None
+                self.parent.domino_last_mover = "player"
+                self.parent.domino_state.pass_turn("player")
+                self.post_data("resolved")
+                return
+            if kind == "need_side":
+                self.parent.domino_pending_domino = domino
+                self.post_data("need_side")
+                return
+            if kind != "move":
+                self.post_failure()
+                return
+            try:
+                move = self.parent.domino_state.play_domino(domino, side, player="player")
+            except Exception:
+                self.post_failure()
+                return
+            self.parent.domino_last_move = move
+            self.parent.domino_last_mover = "player"
+            self.post_data("resolved")
+
+    class ParsePlayerSide(StateNode):
+        def start(self, event):
+            super().start(event)
+            side = self.parent.parse_domino_side(getattr(event, 'string', ''))
+            domino = self.parent.domino_pending_domino
+            if side is None or domino is None or not self.parent.domino_state:
+                self.post_failure()
+                return
+            try:
+                move = self.parent.domino_state.play_domino(domino, side, player="player")
+            except Exception:
+                self.post_failure()
+                return
+            self.parent.domino_pending_domino = None
+            self.parent.domino_last_move = move
+            self.parent.domino_last_mover = "player"
+            self.post_data("resolved")
+
+    class ChooseCelesteMove(StateNode):
+        def start(self, event=None):
+            super().start(event)
+            state = self.parent.domino_state
+            if state is None:
+                self.post_failure()
+                return
+            moves = state.legal_moves("opponent")
+            if not moves:
+                state.pass_turn("opponent")
+                self.parent.domino_last_move = None
+                self.parent.domino_last_mover = "opponent"
+                self.post_data("resolved")
+                return
+            chosen = self.parent.choose_domino_move(moves)
+            try:
+                move = state.play_domino(chosen.domino, chosen.side, player="opponent")
+            except Exception:
+                state.pass_turn("opponent")
+                self.parent.domino_last_move = None
+                self.parent.domino_last_mover = "opponent"
+                self.post_data("resolved")
+                return
+            self.parent.domino_last_move = move
+            self.parent.domino_last_mover = "opponent"
+            self.post_data("resolved")
+
+    class SayDominoBoard(Say):
+        def start(self, event=None):
+            if self.parent.domino_state:
+                board = self.parent.domino_state.format_board()
+            else:
+                board = "(empty)"
+            self.text = f"Board: {board}"
+            super().start(event)
+
+    class SayPlayerMove(Say):
+        def start(self, event=None):
+            move = self.parent.domino_last_move
+            if move is None:
+                self.text = "You pass."
+            else:
+                domino = move.oriented()
+                self.text = f"You play {self.parent.describe_domino(domino)} on the {move.side}."
+            super().start(event)
+
+    class SayCelesteMove(Say):
+        def start(self, event=None):
+            move = self.parent.domino_last_move
+            if move is None:
+                self.text = "I pass."
+            else:
+                domino = move.oriented()
+                self.text = f"I play {self.parent.describe_domino(domino)} on the {move.side}."
+            super().start(event)
+
 
     class SpeakResponse(Say):
       def start(self,event):
@@ -364,7 +590,60 @@ class Celeste(StateMachineProgram):
 
         putdown: Say(["I'm good", "Okay then", "I'm back", "Now then"]) =C=> loop
 
-        loop: StateNode() =Hear()=> AskGPT() =OpenAITrans()=> check
+        loop: StateNode()
+        loop =Hear(re.compile('.*domino.*'))=> domino_intro
+        loop =Hear()=> AskGPT() =OpenAITrans()=> check
+
+        domino_intro: Say("Let's play dominoes. Tell me your hand as pairs, such as 6-6, 5-4, or 3-2.") =C=> domino_get_player_hand
+        domino_get_player_hand: StateNode() =Hear()=> parse_player_hand
+        parse_player_hand: self.ParsePlayerHand()
+        parse_player_hand =D('ok')=> domino_ask_opponent_hand
+        parse_player_hand =F=> domino_bad_player_hand
+        domino_bad_player_hand: Say("Sorry, I didn't catch that. Please try again") =C=> domino_get_player_hand
+
+        domino_ask_opponent_hand: Say("Now tell me my hand the same way.") =C=> domino_get_opponent_hand
+        domino_get_opponent_hand: StateNode() =Hear()=> parse_opponent_hand
+        parse_opponent_hand: self.ParseOpponentHand()
+        parse_opponent_hand =D('ok')=> build_domino
+        parse_opponent_hand =F=> domino_bad_opponent_hand
+        domino_bad_opponent_hand: Say("Sorry, I didn't catch that. Please try again.") =C=> domino_get_opponent_hand
+
+        build_domino: self.BuildDominoGame()
+        build_domino =D('player')=> domino_player_first
+        build_domino =D('opponent')=> domino_celeste_first
+
+        domino_player_first: Say("You go first. Say your move like 6-5 left, or say pass if there are no legal moves.") =C=> domino_wait_player_move
+        domino_celeste_first: Say("I go first.") =C=> domino_celeste_turn
+
+        domino_wait_player_move: StateNode()
+        domino_wait_player_move =Hear(re.compile(r'.*\b(stop|quit|end)\b.*'))=> domino_exit
+        domino_wait_player_move =Hear=> parse_player_move
+
+        parse_player_move: self.ParsePlayerMove()
+        parse_player_move =D('resolved')=> say_player_move
+        parse_player_move =D('need_side')=> domino_need_side
+        parse_player_move =F=> domino_bad_move
+
+        domino_need_side: Say("Which side, left or right?") =C=> domino_wait_player_side
+        domino_wait_player_side: StateNode() =Hear()=> parse_player_side
+        parse_player_side: self.ParsePlayerSide()
+        parse_player_side =D('resolved')=> say_player_move
+        parse_player_side =F=> domino_bad_move
+
+        domino_bad_move: Say("I couldn't play that. Please say a legal move like 6-5 left or pass.") =C=> domino_wait_player_move
+
+        say_player_move: self.SayPlayerMove() =C=> say_domino_board_player
+
+        domino_celeste_turn: self.ChooseCelesteMove()
+        domino_celeste_turn =D('resolved')=> say_celeste_move
+        domino_celeste_turn =F=> domino_wait_player_move
+
+        say_celeste_move: self.SayCelesteMove() =C=> say_domino_board_celeste
+
+        say_domino_board_player: self.SayDominoBoard() =C=> domino_celeste_turn
+        say_domino_board_celeste: self.SayDominoBoard() =C=> domino_wait_player_move
+
+        domino_exit: Say("Okay, ending the domino game.") =C=> loop
 
         check: self.CheckResponse()
         check =D(list)=> dispatch

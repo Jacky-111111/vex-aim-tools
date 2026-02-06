@@ -5,7 +5,7 @@ from domino_game import DominoBlockGameState, Domino
 
 class DominoGameSimulationTests(unittest.TestCase):
     def partial_game(self) -> None:
-        player_hand = [ # TODO: figure out who moves first
+        player_hand = [
             Domino(6, 6),
             Domino(6, 5),
             Domino(5, 4),

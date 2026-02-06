@@ -24,6 +24,8 @@ from viewer.worldmap_viewer import WorldMapViewer
 from viewer.particle_viewer import ParticleViewer
 from viewer.path_viewer import PathViewer
 
+from .domino_game import *
+
 # PyQt6 imshow() API - cv2-style functions
 from viewer import (
     namedWindow,
