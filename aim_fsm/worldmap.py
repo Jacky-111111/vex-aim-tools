@@ -9,12 +9,12 @@ from .utils import *
 from .camera import AIVISION_RESOLUTION_SCALE
 
 class WorldObject():
-    def __init__(self, id=None, name=None, x=0, y=0, z=0, theta=None, is_visible=False):
+    def __init__(self, id=None, name=None, x=0, y=0, z=0, theta=None, is_visible=False, is_fixed=False):
         self.id = id
-        self.pose = Pose(x, y, z, theta)
+        self.pose = PoseEstimate(x, y, z, theta)
         self.name = name or self.__class__.__name__
         self.matched = None  # matching object from data association
-        self.is_fixed = False   # True for walls and markers in predefined maps
+        self.is_fixed = is_fixed   # True for walls and markers in predefined maps
         self.is_obstacle = True # for path planning
         self.is_visible = is_visible
         self.is_missing = False # expect to see it but we don't
@@ -119,21 +119,22 @@ class AprilTag4Obj(AprilTagObj):
     pass
 
 class ArucoMarkerObj(WorldObject):
-    def __init__(self, spec, x=0, y=0, z=0, theta=0):
-        super().__init__(x=x, y=x, z=z, theta=theta)
+    def __init__(self, spec, x=0, y=0, z=0, theta=0, **kwargs):
+        super().__init__(x=x, y=y, z=z, theta=theta, **kwargs)
         self.name = spec['name']
-        self.marker_id = spec['id']
         self.marker = spec['marker']
+        self.marker_id = spec['id']
+        self.marker_string = 'ArucoMarker-' + str(spec['id'])
         self.pose_confidence = +1
 
     def __repr__(self):
         if self.pose_confidence >= 0:
             vis = 'visible' if self.is_visible else 'missing' if self.is_missing else 'unseen'
             fix = ' fixed' if self.is_fixed else ''
-            return '<ArucoMarkerObj %s: (%.1f, %.1f, %.1f) @ %d deg.%s%s>' % \
-                (self.id, self.pose.x, self.pose.y, self.pose.z, self.pose.theta*180/pi, fix, vis)
+            return '<ArucoMarkerObj %s: (%.1f, %.1f, %.1f) @ %d deg.%s %s>' % \
+                (self.marker_id, self.pose.x, self.pose.y, self.pose.z, self.pose.theta*180/pi, fix, vis)
         else:
-            return f'<ArucoMarkerObj {self.id[12:]}: position unknown>'
+            return f'<ArucoMarkerObj {self.marker_id}: position unknown>'
         
 
 class WallObj(WorldObject):
@@ -165,17 +166,15 @@ class WallObj(WorldObject):
             #       f' diff = {neaten(abs(wrap_angle(self.sensor_orient - obj.sensor_orient))*180/pi)}  result: {result}')
         return result
 
-wall_marker_dict = dict()
 
 class WallSpec():
-    def __init__(self, label=None, length=100, height=210, marker_specs=dict(), doorways=dict()):
+    def __init__(self, wall_marker_dict, label=None, length=100, height=210, marker_specs=dict(), doorways=dict()):
         self.length = length
         self.height = height
         self.marker_specs = marker_specs
         self.doorways = doorways
         marker_id_numbers = list(marker_specs.keys())
         self.label = label or f'Wall-{min(marker_id_numbers)}'
-        global wall_marker_dict
         for id in marker_id_numbers:
             wall_marker_dict[id] = self
         wall_marker_dict[self.label] = self
@@ -371,8 +370,8 @@ class WorldMap():
         seen = self.robot.aruco_detector.seen_marker_objects.copy()
         wall_markers = dict()
         for (id,marker) in seen.items():
-            if id in wall_marker_dict:
-                spec = wall_marker_dict[id]
+            if id in self.robot.world_map.wall_marker_dict:
+                spec = self.robot.world_map.wall_marker_dict[id]
                 if spec.label not in wall_markers:
                     wall_markers[spec.label] = list()
                 wall_markers[spec.label].append((id,marker))
@@ -413,7 +412,7 @@ class WorldMap():
                 self.make_doorways_from_wall(wall)
 
     def infer_wall_from_corners_lists(self, wall_id, markers):
-        wall_spec = wall_marker_dict[wall_id]
+        wall_spec = self.robot.world_map.wall_marker_dict[wall_id]
         marker_size = self.robot.aruco_detector.marker_size
         world_points = []
         image_points = []
@@ -449,7 +448,7 @@ class WorldMap():
         wall_orient = euler_angles[1]
         tvec[2][0] += self.robot.kine.camera_from_origin  # want distance from base frame not camera
 
-        sensor_coords = (-tvec[0], -tvec[1], tvec[2])
+        sensor_coords = (-tvec[0,0], -tvec[1,0], tvec[2,0])
         sensor_distance = math.sqrt(sensor_coords[0]**2 + sensor_coords[2]**2)
         sensor_bearing = atan2(sensor_coords[0], sensor_coords[2])
         # Flip wall orientation to match ArUcos for worldmap
@@ -571,7 +570,7 @@ class WorldMap():
         COST_THRESHOLD = 50
         if self.robot.particle_filter and \
            self.robot.particle_filter.state != self.robot.particle_filter.LOCALIZED:
-            return
+            pass # return
         if self.robot.particle_filter:
             pass # print('robot.particle_filter.state=', self.robot.particle_filter.state)
         for candidate in unassociated:
@@ -597,7 +596,6 @@ class WorldMap():
                 pending.remove(m)
             else:
                 self.pending_objects[candidate] = 1
-                #print('proposed', candidate)
         for p in pending:
             #print('retracted', p, '  count=', self.pending_objects[p])
             del self.pending_objects[p]
@@ -736,7 +734,7 @@ class WorldMap():
                         back_markers.append(marker_id)
                 prompt += f'{obj.id} has markers {front_markers} on its front side and {back_markers} on its back side\n'   
 
-            if isinstance(obj, DoorwayObj):
+            if isinstance(obj, DoorwayObj) and obj.wall:
                 prompt += f'{id} is part of {obj.wall.id}\n'
         landmark_ids = list(self.robot.particle_filter.sensor_model.landmarks.keys())
         if landmark_ids:

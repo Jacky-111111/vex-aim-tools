@@ -5,7 +5,7 @@ CELESTE_VERSION = "1.4"
 emoji_list = ', '.join([key for (key,value) in vars(vex.EmojiType).items()
                         if isinstance(value, vex.EmojiType)])
 new_preamble = """
-  IDENTITY SECTION.
+  # IDENTITY SECTION.
   You are an intelligent mobile robot named Celeste.
   You converse with humans and answer questions as concisely as possible.
   You are a type of robot called VEX AIM, manufactured by a company called Innovation First.
@@ -18,7 +18,7 @@ new_preamble = """
   When you are picked up, you cannot move or see, but you can still talk.
   When you are put down again, you will be able to see and move again, but you might not know your location.
 
-  BODY CONTROL SECTION.
+  # BODY CONTROL SECTION.
   Here is how to control your body:
   To move forward by N millimeters, output the string "#forward N" without quotes.
   To move backward, output the string "#forward N" with a negative value, without quotes.
@@ -53,7 +53,7 @@ new_preamble = """
   When using any of these # commands, the command must appear on a line by itself, with nothing preceding it.
   When asked what you see in the camera, first obtain the current camera image, then answer the question after receiving the image.
 
-  MUSICAL NOTES SECTION.
+  # MUSICAL NOTES SECTION.
   You can play musical notes ranging from C5 (middle C) to A8.
   For a sharp write C#5.
   You can only play one note at a time; you cannot play chords.
@@ -63,14 +63,14 @@ new_preamble = """
   An appended minus sign halves the duration.  For an eighth note write C5-.
   When asked to play a song or note sequence, do not say the notes first; just play them using #playnotes.
 
-  PRONUNCIATION SECTION.
+  # PRONUNCIATION SECTION.
   Pronounce "AprilTag-1.a" as "April Tag 1-A", and similarly for any word of form "AprilTag-N.x".
   Pronounce "OrangeBarrel.a" as "Orange Barrel A", pronounce "BlueBarrel.b" as "Blue Barrel B", and similarly for other barrel designators.
   Prounounce "ArucoMarker-2.a" as "Marker 2".
   Pronounce 'Wall-2.a' as "Wall 2".
   Pronounce "Doorway-2:0.a" as "Doorway 2".
 
-  DOMINO SECTION.
+  # DOMINO SECTION.
   The dots on a domino are called pips.
   A domino is described by two numbers, which are the number of pips in each half.
   When describing a domino, state the larger number first, e.g., "a six three domino".
@@ -88,7 +88,7 @@ new_preamble = """
   If you seen green pips, that group has either two or five pips.
   If you see brown pips, that group always has six pips.
 
-  GENERAL ADVICE SECTION.
+  # GENERAL ADVICE SECTION.
   Only objects you are explicitly told are landmarks should be regarded as landmarks.
   Remember to be concise in your answers.
   When asked to perform a physical action such as moving, turning, or dropping an object, perform the action without saying anything.
@@ -98,7 +98,7 @@ new_preamble = """
   When asked when some event occurred, give a relative time, such as "2 minutes go" or "at 5 and a half minutes since the start of this session".
   Do not give a date or an absolute time (such as 3:24 PM) unless explicitly asked for that.
 
-  SAFETY, ETHICS, AND CHILD-INTERACTION SECTION.
+  # SAFETY, ETHICS, AND CHILD-INTERACTION SECTION.
   This is the most important section. Obey these rules at all times.
   1. YOUR ROLE AND AUDIENCE:
   You are a friendly, safe, and helpful robot assistant for students,
@@ -647,56 +647,56 @@ class Celeste(StateMachineProgram):
         #         loop: StateNode()
         #         loop =Hear(re.compile('.*domino.*'))=> domino_intro
         #         loop =Hear()=> AskGPT() =OpenAITrans()=> check
-        # 
+        #
         #         domino_intro: Say("Let's play dominoes. Tell me your hand as pairs, such as 6-6, 5-4, or 3-2.") =C=> domino_get_player_hand
         #         domino_get_player_hand: StateNode() =Hear()=> parse_player_hand
         #         parse_player_hand: self.ParsePlayerHand()
         #         parse_player_hand =D('ok')=> domino_ask_opponent_hand
         #         parse_player_hand =F=> domino_bad_player_hand
         #         domino_bad_player_hand: Say("Sorry, I didn't catch that. Please try again") =C=> domino_get_player_hand
-        # 
+        #
         #         domino_ask_opponent_hand: Say("Now tell me my hand the same way.") =C=> domino_get_opponent_hand
         #         domino_get_opponent_hand: StateNode() =Hear()=> parse_opponent_hand
         #         parse_opponent_hand: self.ParseOpponentHand()
         #         parse_opponent_hand =D('ok')=> build_domino
         #         parse_opponent_hand =F=> domino_bad_opponent_hand
         #         domino_bad_opponent_hand: Say("Sorry, I didn't catch that. Please try again.") =C=> domino_get_opponent_hand
-        # 
+        #
         #         build_domino: self.BuildDominoGame()
         #         build_domino =D('player')=> domino_player_first
         #         build_domino =D('opponent')=> domino_celeste_first
-        # 
+        #
         #         domino_player_first: Say("You go first. Say your move like 6-5 left, or say pass if there are no legal moves.") =C=> domino_wait_player_move
         #         domino_celeste_first: Say("I go first.") =C=> domino_celeste_turn
-        # 
+        #
         #         domino_wait_player_move: StateNode()
         #         domino_wait_player_move =Hear(re.compile(r'.*\b(stop|quit|end)\b.*'))=> domino_exit
         #         domino_wait_player_move =Hear=> parse_player_move
-        # 
+        #
         #         parse_player_move: self.ParsePlayerMove()
         #         parse_player_move =D('resolved')=> say_player_move
         #         parse_player_move =D('need_side')=> domino_need_side
         #         parse_player_move =F=> domino_bad_move
-        # 
+        #
         #         domino_need_side: Say("Which side, left or right?") =C=> domino_wait_player_side
         #         domino_wait_player_side: StateNode() =Hear()=> parse_player_side
         #         parse_player_side: self.ParsePlayerSide()
         #         parse_player_side =D('resolved')=> say_player_move
         #         parse_player_side =F=> domino_bad_move
-        # 
+        #
         #         domino_bad_move: Say("I couldn't play that. Please say a legal move like 6-5 left or pass.") =C=> domino_wait_player_move
-        # 
+        #
         #         say_player_move: self.SayPlayerMove() =C=> say_domino_board_player
-        # 
+        #
         #         domino_celeste_turn: self.ChooseCelesteMove()
         #         domino_celeste_turn =D('resolved')=> say_celeste_move
         #         domino_celeste_turn =F=> domino_wait_player_move
-        # 
+        #
         #         say_celeste_move: self.SayCelesteMove() =C=> say_domino_board_celeste
-        # 
+        #
         #         say_domino_board_player: self.SayDominoBoard() =C=> domino_celeste_turn
         #         say_domino_board_celeste: self.SayDominoBoard() =C=> domino_wait_player_move
-        # 
+        #
         #         domino_exit: Say("Okay, ending the domino game.") =C=> loop
         # 
         #         check: self.CheckResponse()
@@ -715,10 +715,10 @@ class Celeste(StateMachineProgram):
         #         dispatch =D(re.compile('#drop$'))=> self.CmdDrop() =CNext=> dispatch
         #         dispatch =D(re.compile('#kick$'))=> self.CmdKick() =CNext=> dispatch
         #         dispatch =D(re.compile('#glow '))=> self.CmdGlow() =CNext=> dispatch
-        # 	dispatch =D(re.compile('#flash '))=> self.CmdFlash() =CNext=> dispatch
-        # 	dispatch =D(re.compile('#emoji '))=> self.CmdEmoji() =CNext=> dispatch
-        # 	dispatch =D(re.compile('#act '))=> self.CmdAct() =CNext=> dispatch
-        # 	dispatch =D(re.compile('#playnotes '))=> self.CmdPlayNotes() =CNext=> dispatch
+        # 	    dispatch =D(re.compile('#flash '))=> self.CmdFlash() =CNext=> dispatch
+        # 	    dispatch =D(re.compile('#emoji '))=> self.CmdEmoji() =CNext=> dispatch
+        # 	    dispatch =D(re.compile('#act '))=> self.CmdAct() =CNext=> dispatch
+        # 	    dispatch =D(re.compile('#playnotes '))=> self.CmdPlayNotes() =CNext=> dispatch
         #         dispatch =D(re.compile('#camera$'))=> self.CmdSendCamera() =C=>
         #             AskGPT("Please respond to the query using the camera image.") =OpenAITrans()=> check
         #         dispatch =D()=> Print(prefix='Unrecognized #-command: ') =Next=> dispatch
@@ -812,115 +812,115 @@ class Celeste(StateMachineProgram):
         
         heartrans1 = HearTrans(re.compile('.*domino.*')) .set_name("heartrans1")
         heartrans1 .add_sources(loop) .add_destinations(domino_intro)
-        
+
         heartrans2 = HearTrans() .set_name("heartrans2")
         heartrans2 .add_sources(loop) .add_destinations(askgpt1)
         
         openaitrans1 = OpenAITrans() .set_name("openaitrans1")
         openaitrans1 .add_sources(askgpt1) .add_destinations(check)
-        
+
         completiontrans9 = CompletionTrans() .set_name("completiontrans9")
         completiontrans9 .add_sources(domino_intro) .add_destinations(domino_get_player_hand)
-        
+
         heartrans3 = HearTrans() .set_name("heartrans3")
         heartrans3 .add_sources(domino_get_player_hand) .add_destinations(parse_player_hand)
         
         datatrans6 = DataTrans('ok') .set_name("datatrans6")
         datatrans6 .add_sources(parse_player_hand) .add_destinations(domino_ask_opponent_hand)
-        
+
         failuretrans2 = FailureTrans() .set_name("failuretrans2")
         failuretrans2 .add_sources(parse_player_hand) .add_destinations(domino_bad_player_hand)
-        
+
         completiontrans10 = CompletionTrans() .set_name("completiontrans10")
         completiontrans10 .add_sources(domino_bad_player_hand) .add_destinations(domino_get_player_hand)
-        
+
         completiontrans11 = CompletionTrans() .set_name("completiontrans11")
         completiontrans11 .add_sources(domino_ask_opponent_hand) .add_destinations(domino_get_opponent_hand)
-        
+
         heartrans4 = HearTrans() .set_name("heartrans4")
         heartrans4 .add_sources(domino_get_opponent_hand) .add_destinations(parse_opponent_hand)
-        
+
         datatrans7 = DataTrans('ok') .set_name("datatrans7")
         datatrans7 .add_sources(parse_opponent_hand) .add_destinations(build_domino)
-        
+
         failuretrans3 = FailureTrans() .set_name("failuretrans3")
         failuretrans3 .add_sources(parse_opponent_hand) .add_destinations(domino_bad_opponent_hand)
-        
+
         completiontrans12 = CompletionTrans() .set_name("completiontrans12")
         completiontrans12 .add_sources(domino_bad_opponent_hand) .add_destinations(domino_get_opponent_hand)
-        
+
         datatrans8 = DataTrans('player') .set_name("datatrans8")
         datatrans8 .add_sources(build_domino) .add_destinations(domino_player_first)
-        
+
         datatrans9 = DataTrans('opponent') .set_name("datatrans9")
         datatrans9 .add_sources(build_domino) .add_destinations(domino_celeste_first)
-        
+
         completiontrans13 = CompletionTrans() .set_name("completiontrans13")
         completiontrans13 .add_sources(domino_player_first) .add_destinations(domino_wait_player_move)
-        
+
         completiontrans14 = CompletionTrans() .set_name("completiontrans14")
         completiontrans14 .add_sources(domino_celeste_first) .add_destinations(domino_celeste_turn)
-        
+
         heartrans5 = HearTrans(re.compile(r'.*\b(stop|quit|end)\b.*')) .set_name("heartrans5")
         heartrans5 .add_sources(domino_wait_player_move) .add_destinations(domino_exit)
-        
+
         heartrans6 = HearTrans() .set_name("heartrans6")
         heartrans6 .add_sources(domino_wait_player_move) .add_destinations(parse_player_move)
-        
+
         datatrans10 = DataTrans('resolved') .set_name("datatrans10")
         datatrans10 .add_sources(parse_player_move) .add_destinations(say_player_move)
-        
+
         datatrans11 = DataTrans('need_side') .set_name("datatrans11")
         datatrans11 .add_sources(parse_player_move) .add_destinations(domino_need_side)
-        
+
         failuretrans4 = FailureTrans() .set_name("failuretrans4")
         failuretrans4 .add_sources(parse_player_move) .add_destinations(domino_bad_move)
-        
+
         completiontrans15 = CompletionTrans() .set_name("completiontrans15")
         completiontrans15 .add_sources(domino_need_side) .add_destinations(domino_wait_player_side)
-        
+
         heartrans7 = HearTrans() .set_name("heartrans7")
         heartrans7 .add_sources(domino_wait_player_side) .add_destinations(parse_player_side)
-        
+
         datatrans12 = DataTrans('resolved') .set_name("datatrans12")
         datatrans12 .add_sources(parse_player_side) .add_destinations(say_player_move)
-        
+
         failuretrans5 = FailureTrans() .set_name("failuretrans5")
         failuretrans5 .add_sources(parse_player_side) .add_destinations(domino_bad_move)
-        
+
         completiontrans16 = CompletionTrans() .set_name("completiontrans16")
         completiontrans16 .add_sources(domino_bad_move) .add_destinations(domino_wait_player_move)
-        
+
         completiontrans17 = CompletionTrans() .set_name("completiontrans17")
         completiontrans17 .add_sources(say_player_move) .add_destinations(say_domino_board_player)
-        
+
         datatrans13 = DataTrans('resolved') .set_name("datatrans13")
         datatrans13 .add_sources(domino_celeste_turn) .add_destinations(say_celeste_move)
-        
+
         failuretrans6 = FailureTrans() .set_name("failuretrans6")
         failuretrans6 .add_sources(domino_celeste_turn) .add_destinations(domino_wait_player_move)
-        
+
         completiontrans18 = CompletionTrans() .set_name("completiontrans18")
         completiontrans18 .add_sources(say_celeste_move) .add_destinations(say_domino_board_celeste)
-        
+
         completiontrans19 = CompletionTrans() .set_name("completiontrans19")
         completiontrans19 .add_sources(say_domino_board_player) .add_destinations(domino_celeste_turn)
-        
+
         completiontrans20 = CompletionTrans() .set_name("completiontrans20")
         completiontrans20 .add_sources(say_domino_board_celeste) .add_destinations(domino_wait_player_move)
-        
+
         completiontrans21 = CompletionTrans() .set_name("completiontrans21")
         completiontrans21 .add_sources(domino_exit) .add_destinations(loop)
-        
+
         datatrans14 = DataTrans(list) .set_name("datatrans14")
         datatrans14 .add_sources(check) .add_destinations(dispatch)
-        
+
         datatrans15 = DataTrans(str) .set_name("datatrans15")
         datatrans15 .add_sources(check) .add_destinations(speakresponse1)
-        
+
         completiontrans22 = CompletionTrans() .set_name("completiontrans22")
         completiontrans22 .add_sources(speakresponse1) .add_destinations(loop)
-        
+
         datatrans16 = DataTrans(re.compile('#say ')) .set_name("datatrans16")
         datatrans16 .add_sources(dispatch) .add_destinations(cmdsay1)
         

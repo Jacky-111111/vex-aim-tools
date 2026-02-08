@@ -21,6 +21,7 @@ from viewer.cam_viewer import CamViewer
 from viewer.worldmap_viewer import WorldMapViewer
 from .aruco import *
 from .worldmap import WorldMap
+from .wall_defs import default_wall_marker_dict
 from .particle import *
 from .utils import Pose
 from viewer.particle_viewer import ParticleViewer
@@ -44,12 +45,8 @@ class StateMachineProgram(StateNode):
                  annotated_image_callback: Optional[Callable[[Any, dict], None]] = None,
                  viewer_crosshairs = False,  # set to True to draw viewer crosshairs
                  speech = True,
-
                  particle_filter = None,
-                 num_particles = 500,
-                 sensor_model = "default",
-                 landmark_test = SLAMSensorModel.is_wall_landmark, # SLAMSensorModel.is_solo_aruco_landmark, #
-                 landmarks = None,
+                 wall_marker_dict = default_wall_marker_dict,
                  launch_particle_viewer = False,
                  particle_viewer_scale = 1.0,
                  launch_path_viewer = False,
@@ -77,16 +74,13 @@ class StateMachineProgram(StateNode):
 
         self.launch_cam_viewer = launch_cam_viewer
         self.viewer = None
+        self.wall_marker_dict = wall_marker_dict or dict()
         self.annotate_sdk = annotate_sdk
         self.force_annotation = force_annotation
         self.annotated_scale_factor = annotated_scale_factor
         self.annotated_image_callback = annotated_image_callback
         self.viewer_crosshairs = viewer_crosshairs
         self.speech = speech
-        self.num_particles = num_particles
-        self.landmarks = landmarks
-        self.sensor_model = sensor_model
-        self.landmark_test = landmark_test
         self.launch_particle_viewer = launch_particle_viewer
         self.particle_viewer_scale = particle_viewer_scale
         self.launch_path_viewer = launch_path_viewer
@@ -99,11 +93,14 @@ class StateMachineProgram(StateNode):
             self.robot.aruco_detector = \
                 RobotArucoDetector(self.robot, dictionary_name, aruco_marker_size, aruco_disabled_ids)
 
-        if particle_filter:
+        if isinstance(particle_filter, ParticleFilter):
             self.particle_filter = particle_filter
-        else:
+        elif particle_filter is None:
             self.particle_filter = \
-                SLAMParticleFilter(self.robot, landmark_test=self.landmark_test)
+                SLAMParticleFilter(self.robot, num_particles=500,
+                                   landmark_test=SLAMSensorModel.is_wall_landmark)
+        else:
+            raise TypeError(f'Not a ParticleFilter instance: {particle_filter=}')
 
         self.perched_cameras = perched_cameras
         if self.perched_cameras:
@@ -122,12 +119,12 @@ class StateMachineProgram(StateNode):
         running_fsm = self
         # Create a particle filter
         if self.particle_filter is None:
-            self.particle_filter = ParticleFilter(self.robot,
-                                                  num_particles=self.num_particles,
-                                                  landmarks=self.landmarks,
-                                                  sensor_model=self.sensor_model)
-        # elif isinstance(self.particle_filter,SLAMParticleFilter):
-        #    self.particle_filter.clear_landmarks()
+            self.particle_filter = SLAMParticleFilter(self.robot,
+                                                      num_particles=self.num_particles,
+                                                      landmarks=self.landmarks,
+                                                      sensor_model=self.sensor_model)
+        elif isinstance(self.particle_filter,SLAMParticleFilter):
+            self.particle_filter.clear_landmarks()
         self.robot.particle_filter = self.particle_filter
 
         # Set up robot state
@@ -137,8 +134,8 @@ class StateMachineProgram(StateNode):
         self.robot.robot0.led.on(vex.LightType.ALL_LEDS, vex.Color.TRANSPARENT)
         self.robot.clear_actuators()
 
-        # World map and path planner
-        #self.robot.world.rrt = self.rrt or RRT(self.robot)
+        # World map
+        self.robot.world_map.wall_marker_dict = self.wall_marker_dict
 
         # Polling
         self.set_polling_interval(0.025)  # for kine and motion model update
@@ -210,7 +207,7 @@ class StateMachineProgram(StateNode):
         pass
 
     def robot_put_down_default(self):
-        pass
+        print('Robot was put down.')
 
     def user_image(self,image,gray): pass
 
@@ -233,12 +230,32 @@ class StateMachineProgram(StateNode):
             meta["aivision"] = None
         return meta
 
+    def _resolve_status(self):
+        status = getattr(self.robot, "status", None)
+        try:
+            if status is not None and "aivision" in status:
+                return status
+        except TypeError:
+            pass
+        robot0 = getattr(self.robot, "robot0", None)
+        if robot0 is not None:
+            try:
+                status0 = getattr(robot0, "status", None)
+            except Exception:
+                status0 = None
+            try:
+                if status0 is not None and "aivision" in status0:
+                    return status0
+            except TypeError:
+                pass
+        return status
+
     def _emit_annotated_frame(self, image):
         callback = getattr(self, "annotated_image_callback", None)
         if callback is None:
             return
-        status = getattr(self.robot, "status", None)
-        overlay_status = status if self.annotate_sdk else None
+        status = self._resolve_status()
+        overlay_status = status
         annotated = apply_overlays(
             image,
             overlay_status,
@@ -261,9 +278,9 @@ class StateMachineProgram(StateNode):
         self.user_image(image,gray)
         if self.annotated_image_callback is not None:
             self._emit_annotated_frame(image)
-        elif self.force_annotation and not self.robot.cam_viewer:
-            status = getattr(self.robot, "status", None)
-            overlay_status = status if self.annotate_sdk else None
+        elif self.force_annotation and (not self.robot.cam_viewer or not self.robot.cam_viewer.is_running()):
+            status = self._resolve_status()
+            overlay_status = status
             annotated = apply_overlays(
                 image,
                 overlay_status,
