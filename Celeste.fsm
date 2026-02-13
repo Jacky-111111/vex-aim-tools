@@ -1,6 +1,8 @@
 from aim_fsm import *
+from aim_fsm.events import OpenAIEvent
 
 CELESTE_VERSION = "1.4"
+DISABLE_DOMINO_PREAMBLE = True
 
 emoji_list = ', '.join([key for (key,value) in vars(vex.EmojiType).items()
                         if isinstance(value, vex.EmojiType)])
@@ -166,6 +168,16 @@ class Celeste(StateMachineProgram):
         self.domino_last_move = None
         self.domino_last_mover = None
         super().start()
+
+    def enable_domino_prompt(self):
+        if DISABLE_DOMINO_PREAMBLE:
+            return
+        self.robot.openai_client.enable_domino_preamble()
+
+    def disable_domino_prompt(self):
+        if DISABLE_DOMINO_PREAMBLE:
+            return
+        self.robot.openai_client.disable_domino_preamble()
 
     class CheckResponse(StateNode):
         def start(self, event):
@@ -393,43 +405,109 @@ class Celeste(StateMachineProgram):
         numbers = self._extract_domino_numbers(text)
         if len(numbers) < 2 or len(numbers) % 2 != 0:
             return None
-        return [Domino(numbers[i], numbers[i+1]) for i in range(0, len(numbers), 2)]
-
-    def parse_domino_side(self, text):
-        if text is None:
+        try:
+            return [Domino(numbers[i], numbers[i+1]) for i in range(0, len(numbers), 2)]
+        except ValueError:
             return None
-        lowered = text.lower()
-        if 'left' in lowered:
-            return 'left'
-        if 'right' in lowered:
-            return 'right'
-        return None
+
+    def _domino_unordered_equal(self, left_domino, right_domino):
+        return (
+            (left_domino.left == right_domino.left and left_domino.right == right_domino.right)
+            or (left_domino.left == right_domino.right and left_domino.right == right_domino.left)
+        )
+
+    def _end_domino_match_flags(self, end_domino):
+        if not self.domino_state or not self.domino_state.board:
+            return (False, False)
+        left_domino = self.domino_state.board[0]
+        right_domino = self.domino_state.board[-1]
+        match_left = self._domino_unordered_equal(end_domino, left_domino)
+        match_right = self._domino_unordered_equal(end_domino, right_domino)
+        return (match_left, match_right)
+
+    def _match_end_domino_anchor(self, end_domino):
+        match_left, match_right = self._end_domino_match_flags(end_domino)
+        if not self.domino_state or not self.domino_state.board:
+            return (None, None)
+        left_domino = self.domino_state.board[0]
+        right_domino = self.domino_state.board[-1]
+        left_end, right_end = self.domino_state.board_ends()
+        if match_left and not match_right:
+            return (left_domino, left_end)
+        if match_right and not match_left:
+            return (right_domino, right_end)
+        if match_left and match_right and left_end == right_end:
+            # Double on a single-tile board; pick a default end.
+            return (right_domino, right_end)
+        return (None, None)
+
+    def parse_domino_side_or_end(self, text):
+        numbers = self._extract_domino_numbers(text)
+        if not numbers:
+            return (None, None)
+        if not self.domino_state or not self.domino_state.board:
+            return (None, None)
+        if len(numbers) >= 2:
+            try:
+                end_domino = Domino(numbers[0], numbers[1])
+            except ValueError:
+                return (None, None)
+            return self._match_end_domino_anchor(end_domino)
+        # Single number: treat as end value.
+        end_value = numbers[0]
+        left_end, right_end = self.domino_state.board_ends()
+        left_domino = self.domino_state.board[0]
+        right_domino = self.domino_state.board[-1]
+        if end_value == left_end and end_value != right_end:
+            return (left_domino, left_end)
+        if end_value == right_end and end_value != left_end:
+            return (right_domino, right_end)
+        if left_end == right_end and end_value == left_end:
+            return (right_domino, right_end)
+        return (None, None)
 
     def parse_domino_move(self, text):
         if text is None:
-            return ("invalid", None, None)
+            return ("invalid", None, None, None)
         lowered = text.lower()
         if re.search(r'\b(pass|skip|no move)\b', lowered):
-            return ("pass", None, None)
+            return ("pass", None, None, None)
         numbers = self._extract_domino_numbers(lowered)
         if len(numbers) < 2:
-            return ("invalid", None, None)
-        domino = Domino(numbers[0], numbers[1])
-        side = self.parse_domino_side(lowered)
-        if side is None:
+            return ("invalid", None, None, None)
+        try:
+            domino = Domino(numbers[0], numbers[1])
+        except ValueError:
+            return ("invalid", None, None, None)
+        anchor_domino = None
+        anchor_value = None
+        if len(numbers) >= 4 and self.domino_state and self.domino_state.board:
+            try:
+                end_domino = Domino(numbers[2], numbers[3])
+            except ValueError:
+                return ("invalid", None, None, None)
+            anchor_domino, anchor_value = self._match_end_domino_anchor(end_domino)
+            if anchor_domino is None:
+                return ("invalid", None, None, None)
+        if anchor_domino is None:
             if not self.domino_state or not self.domino_state.board:
-                side = "right"
+                anchor_domino = None
             else:
                 left_end, right_end = self.domino_state.board_ends()
                 match_left = domino.matches(left_end)
                 match_right = domino.matches(right_end)
                 if match_left and not match_right:
-                    side = "left"
+                    anchor_domino = self.domino_state.board[0]
+                    anchor_value = left_end
                 elif match_right and not match_left:
-                    side = "right"
+                    anchor_domino = self.domino_state.board[-1]
+                    anchor_value = right_end
+                elif left_end == right_end and match_left and match_right:
+                    anchor_domino = self.domino_state.board[-1]
+                    anchor_value = right_end
                 else:
-                    return ("need_side", domino, None)
-        return ("move", domino, side)
+                    return ("need_side", domino, None, None)
+        return ("move", domino, anchor_domino, anchor_value)
 
     def choose_domino_move(self, moves):
         return max(moves, key=lambda move: move.oriented().left + move.oriented().right)
@@ -439,10 +517,108 @@ class Celeste(StateMachineProgram):
         low = min(domino.left, domino.right)
         return f"{high}-{low}"
 
+    def _event_text(self, event):
+        if event is None:
+            return ""
+        text = getattr(event, 'response', None)
+        if text is None:
+            text = getattr(event, 'string', '')
+        if text is None:
+            return ""
+        return str(text).strip()
+
+    def _domino_prompt_context(self):
+        state = self.domino_state
+        if not state:
+            return {
+                "board": "(unknown board)",
+                "left_domino": "none",
+                "right_domino": "none",
+                "left_end": "none",
+                "right_end": "none",
+                "hand": "(unknown hand)",
+            }
+        board = "(empty board)" if not state.board else " - ".join(self.describe_domino(d) for d in state.board)
+        if state.board:
+            left_domino = self.describe_domino(state.board[0])
+            right_domino = self.describe_domino(state.board[-1])
+            left_end, right_end = state.board_ends()
+        else:
+            left_domino = "none"
+            right_domino = "none"
+            left_end = "none"
+            right_end = "none"
+        hand = "(empty hand)" if not state.player_hand else ", ".join(self.describe_domino(d) for d in state.player_hand)
+        return {
+            "board": board,
+            "left_domino": left_domino,
+            "right_domino": right_domino,
+            "left_end": left_end,
+            "right_end": right_end,
+            "hand": hand,
+        }
+
+    def build_domino_move_prompt(self, user_text):
+        ctx = self._domino_prompt_context()
+        return (
+            "You are a parser for a domino game.\n"
+            "Return only one line:\n"
+            "- pass\n"
+            "- X-Y A-B\n"
+            "- X-Y\n"
+            "Rules:\n"
+            "- Use digits 0-6, hyphens, and spaces only (except the words pass or invalid).\n"
+            "- X-Y is the domino the player wants to play.\n"
+            "- A-B is the board-end domino the move attaches to.\n"
+            "- If the board is empty, output only X-Y.\n"
+            "- If both ends match and the user did not specify a specific end, output only X-Y.\n"
+            "- If the user says pass/skip/no move, output pass.\n"
+            "- If you cannot determine a move, output invalid.\n"
+            f"Board: {ctx['board']}\n"
+            f"Left end domino: {ctx['left_domino']} (end value {ctx['left_end']})\n"
+            f"Right end domino: {ctx['right_domino']} (end value {ctx['right_end']})\n"
+            f"Player hand: {ctx['hand']}\n"
+            f"User input: {user_text}"
+        )
+
+    def build_domino_side_prompt(self, user_text):
+        ctx = self._domino_prompt_context()
+        return (
+            "You are a parser for a domino game.\n"
+            "Return only one line:\n"
+            "- X-Y\n"
+            "- N\n"
+            "- invalid\n"
+            "Rules:\n"
+            "- Use digits 0-6, hyphens, and spaces only (except the word invalid).\n"
+            "- Output the board-end domino the user means, or the end value N.\n"
+            "- If the user names a number, prefer outputting N.\n"
+            "- If both ends match and the user did not specify a specific end, output invalid.\n"
+            "- If the board is empty, output invalid.\n"
+            f"Board: {ctx['board']}\n"
+            f"Left end domino: {ctx['left_domino']} (end value {ctx['left_end']})\n"
+            f"Right end domino: {ctx['right_domino']} (end value {ctx['right_end']})\n"
+            f"User input: {user_text}"
+        )
+
+    def build_domino_hand_prompt(self, user_text, who):
+        return (
+            "You are a parser for a domino game.\n"
+            "Return only one line:\n"
+            "- a space-separated list of dominoes as X-Y pairs\n"
+            "- invalid\n"
+            "Rules:\n"
+            "- Use digits 0-6, hyphens, and spaces only (except the word invalid).\n"
+            "- Each domino must be written as X-Y.\n"
+            "- Keep the order the user said if possible.\n"
+            "- If the user lists fewer than one domino, output invalid.\n"
+            f"Whose hand: {who}\n"
+            f"User input: {user_text}"
+        )
     class ParsePlayerHand(StateNode):
         def start(self, event):
             super().start(event)
-            text = getattr(event, 'string', '')
+            text = self.parent._event_text(event)
             hand = self.parent.parse_domino_list(text)
             if not hand:
                 self.post_failure()
@@ -453,13 +629,55 @@ class Celeste(StateMachineProgram):
     class ParseOpponentHand(StateNode):
         def start(self, event):
             super().start(event)
-            text = getattr(event, 'string', '')
+            text = self.parent._event_text(event)
             hand = self.parent.parse_domino_list(text)
             if not hand:
                 self.post_failure()
                 return
             self.parent.domino_opponent_hand = hand
             self.post_data('ok')
+
+    class SayPlayerHand(Say):
+        def start(self, event=None):
+            hand = self.parent.domino_player_hand
+            if not hand:
+                self.text = "Error. I do not have your hand."
+            else:
+                formatted = ", ".join(self.parent.describe_domino(d) for d in hand)
+                self.text = f"You said your hand is: {formatted}."
+            super().start(event)
+
+    class SayOpponentHand(Say):
+        def start(self, event=None):
+            hand = self.parent.domino_opponent_hand
+            if not hand:
+                self.text = "Error. I do not have my hand."
+            else:
+                formatted = ", ".join(self.parent.describe_domino(d) for d in hand)
+                self.text = f"You said my hand is: {formatted}."
+            super().start(event)
+
+    class NormalizePlayerHand(StateNode):
+        def start(self, event):
+            super().start(event)
+            user_text = self.parent._event_text(event)
+            prompt = self.parent.build_domino_hand_prompt(user_text, "player")
+            client = getattr(self.robot, "openai_client", None)
+            if client is None or client.client is None:
+                self.post_event(OpenAIEvent(user_text), suppress_trace=True)
+                return
+            self.robot.openai_client.query(prompt)
+
+    class NormalizeOpponentHand(StateNode):
+        def start(self, event):
+            super().start(event)
+            user_text = self.parent._event_text(event)
+            prompt = self.parent.build_domino_hand_prompt(user_text, "opponent")
+            client = getattr(self.robot, "openai_client", None)
+            if client is None or client.client is None:
+                self.post_event(OpenAIEvent(user_text), suppress_trace=True)
+                return
+            self.robot.openai_client.query(prompt)
 
     class BuildDominoGame(StateNode):
         def start(self, event=None):
@@ -482,7 +700,8 @@ class Celeste(StateMachineProgram):
             if not self.parent.domino_state:
                 self.post_failure()
                 return
-            kind, domino, side = self.parent.parse_domino_move(getattr(event, 'string', ''))
+            text = self.parent._event_text(event)
+            kind, domino, anchor_domino, anchor_value = self.parent.parse_domino_move(text)
             if kind == "pass":
                 self.parent.domino_last_move = None
                 self.parent.domino_last_mover = "player"
@@ -497,7 +716,12 @@ class Celeste(StateMachineProgram):
                 self.post_failure()
                 return
             try:
-                move = self.parent.domino_state.play_domino(domino, side, player="player")
+                move = self.parent.domino_state.play_domino(
+                    domino,
+                    anchor_domino=anchor_domino,
+                    anchor_value=anchor_value,
+                    player="player",
+                )
             except Exception:
                 self.post_failure()
                 return
@@ -505,16 +729,50 @@ class Celeste(StateMachineProgram):
             self.parent.domino_last_mover = "player"
             self.post_data("resolved")
 
+    class NormalizeDominoMove(StateNode):
+        def start(self, event):
+            super().start(event)
+            if not self.parent.domino_state:
+                self.post_failure()
+                return
+            user_text = self.parent._event_text(event)
+            prompt = self.parent.build_domino_move_prompt(user_text)
+            client = getattr(self.robot, "openai_client", None)
+            if client is None or client.client is None:
+                self.post_event(OpenAIEvent(user_text), suppress_trace=True)
+                return
+            self.robot.openai_client.query(prompt)
+
+    class NormalizeDominoSide(StateNode):
+        def start(self, event):
+            super().start(event)
+            if not self.parent.domino_state:
+                self.post_failure()
+                return
+            user_text = self.parent._event_text(event)
+            prompt = self.parent.build_domino_side_prompt(user_text)
+            client = getattr(self.robot, "openai_client", None)
+            if client is None or client.client is None:
+                self.post_event(OpenAIEvent(user_text), suppress_trace=True)
+                return
+            self.robot.openai_client.query(prompt)
+
     class ParsePlayerSide(StateNode):
         def start(self, event):
             super().start(event)
-            side = self.parent.parse_domino_side(getattr(event, 'string', ''))
+            text = self.parent._event_text(event)
+            anchor_domino, anchor_value = self.parent.parse_domino_side_or_end(text)
             domino = self.parent.domino_pending_domino
-            if side is None or domino is None or not self.parent.domino_state:
+            if anchor_domino is None or domino is None or not self.parent.domino_state:
                 self.post_failure()
                 return
             try:
-                move = self.parent.domino_state.play_domino(domino, side, player="player")
+                move = self.parent.domino_state.play_domino(
+                    domino,
+                    anchor_domino=anchor_domino,
+                    anchor_value=anchor_value,
+                    player="player",
+                )
             except Exception:
                 self.post_failure()
                 return
@@ -539,7 +797,12 @@ class Celeste(StateMachineProgram):
                 return
             chosen = self.parent.choose_domino_move(moves)
             try:
-                move = state.play_domino(chosen.domino, chosen.side, player="opponent")
+                move = state.play_domino(
+                    chosen.domino,
+                    anchor_domino=chosen.anchor_domino,
+                    anchor_value=chosen.anchor_value,
+                    player="opponent",
+                )
             except Exception:
                 state.pass_turn("opponent")
                 self.parent.domino_last_move = None
@@ -559,6 +822,25 @@ class Celeste(StateMachineProgram):
             self.text = f"Board: {board}"
             super().start(event)
 
+    class CheckDominoGameOver(StateNode):
+        def start(self, event=None):
+            super().start(event)
+            state = self.parent.domino_state
+            if state is None:
+                self.post_failure()
+                return
+            if not state.player_hand or not state.opponent_hand:
+                self.post_data("over")
+                return
+            last_mover = self.parent.domino_last_mover
+            if last_mover == "player":
+                self.post_data("to_celeste")
+                return
+            if last_mover == "opponent":
+                self.post_data("to_player")
+                return
+            self.post_failure()
+
     class SayPlayerMove(Say):
         def start(self, event=None):
             move = self.parent.domino_last_move
@@ -566,7 +848,12 @@ class Celeste(StateMachineProgram):
                 self.text = "You pass."
             else:
                 domino = move.oriented()
-                self.text = f"You play {self.parent.describe_domino(domino)} on the {move.side}."
+                end_domino = getattr(move, "anchor_domino", None)
+                if end_domino is None:
+                    self.text = f"You play {self.parent.describe_domino(domino)}."
+                else:
+                    end_desc = self.parent.describe_domino(end_domino)
+                    self.text = f"You play {self.parent.describe_domino(domino)} on the {end_desc} end."
             super().start(event)
 
     class SayCelesteMove(Say):
@@ -576,7 +863,38 @@ class Celeste(StateMachineProgram):
                 self.text = "I pass."
             else:
                 domino = move.oriented()
-                self.text = f"I play {self.parent.describe_domino(domino)} on the {move.side}."
+                end_domino = getattr(move, "anchor_domino", None)
+                if end_domino is None:
+                    self.text = f"I play {self.parent.describe_domino(domino)}."
+                else:
+                    end_desc = self.parent.describe_domino(end_domino)
+                    self.text = f"I play {self.parent.describe_domino(domino)} on the {end_desc} end."
+            super().start(event)
+
+    class DominoIntro(Say):
+        def start(self, event=None):
+            self.parent.enable_domino_prompt()
+            super().start(event)
+
+    class DominoExit(Say):
+        def start(self, event=None):
+            self.parent.disable_domino_prompt()
+            super().start(event)
+
+    class DominoGameOver(Say):
+        def start(self, event=None):
+            self.parent.disable_domino_prompt()
+            state = self.parent.domino_state
+            if state is None:
+                self.text = "Game over."
+            elif not state.player_hand and not state.opponent_hand:
+                self.text = "Game over."
+            elif not state.player_hand:
+                self.text = "You win!"
+            elif not state.opponent_hand:
+                self.text = "I win!"
+            else:
+                self.text = "Game over."
             super().start(event)
 
 
@@ -594,43 +912,56 @@ class Celeste(StateMachineProgram):
         loop =Hear(re.compile('.*domino.*'))=> domino_intro
         loop =Hear()=> AskGPT() =OpenAITrans()=> check
 
-        domino_intro: Say("Let's play dominoes. Tell me your hand as pairs, such as 6-6, 5-4, or 3-2.") =C=> domino_get_player_hand
-        domino_get_player_hand: StateNode() =Hear()=> parse_player_hand
+        domino_intro: self.DominoIntro("Let's play dominoes. Tell me your hand as pairs, such as 6-6, 5-4, or 3-2.") =C=> domino_get_player_hand
+        domino_get_player_hand: StateNode() =Hear()=> normalize_player_hand
+        normalize_player_hand: self.NormalizePlayerHand()
+        normalize_player_hand =OpenAITrans()=> parse_player_hand
         parse_player_hand: self.ParsePlayerHand()
-        parse_player_hand =D('ok')=> domino_ask_opponent_hand
+        parse_player_hand =D('ok')=> say_player_hand
         parse_player_hand =F=> domino_bad_player_hand
         domino_bad_player_hand: Say("Sorry, I didn't catch that. Please try again") =C=> domino_get_player_hand
 
+        say_player_hand: self.SayPlayerHand() =C=> domino_ask_opponent_hand
         domino_ask_opponent_hand: Say("Now tell me my hand the same way.") =C=> domino_get_opponent_hand
-        domino_get_opponent_hand: StateNode() =Hear()=> parse_opponent_hand
+        domino_get_opponent_hand: StateNode() =Hear()=> normalize_opponent_hand
+        normalize_opponent_hand: self.NormalizeOpponentHand()
+        normalize_opponent_hand =OpenAITrans()=> parse_opponent_hand
         parse_opponent_hand: self.ParseOpponentHand()
-        parse_opponent_hand =D('ok')=> build_domino
+        parse_opponent_hand =D('ok')=> say_opponent_hand
         parse_opponent_hand =F=> domino_bad_opponent_hand
         domino_bad_opponent_hand: Say("Sorry, I didn't catch that. Please try again.") =C=> domino_get_opponent_hand
 
+        say_opponent_hand: self.SayOpponentHand() =C=> build_domino
         build_domino: self.BuildDominoGame()
         build_domino =D('player')=> domino_player_first
         build_domino =D('opponent')=> domino_celeste_first
 
-        domino_player_first: Say("You go first. Say your move like 6-5 left, or say pass if there are no legal moves.") =C=> domino_wait_player_move
+        domino_player_first: Say("You go first. Tell me your move in your own words, or say pass if there are no legal moves.") =C=> domino_wait_player_move
         domino_celeste_first: Say("I go first.") =C=> domino_celeste_turn
 
         domino_wait_player_move: StateNode()
         domino_wait_player_move =Hear(re.compile(r'.*\b(stop|quit|end)\b.*'))=> domino_exit
-        domino_wait_player_move =Hear=> parse_player_move
+        domino_wait_player_move =Hear=> normalize_domino_move
+
+        normalize_domino_move: self.NormalizeDominoMove()
+        normalize_domino_move =OpenAITrans()=> parse_player_move
 
         parse_player_move: self.ParsePlayerMove()
         parse_player_move =D('resolved')=> say_player_move
         parse_player_move =D('need_side')=> domino_need_side
         parse_player_move =F=> domino_bad_move
 
-        domino_need_side: Say("Which side, left or right?") =C=> domino_wait_player_side
-        domino_wait_player_side: StateNode() =Hear()=> parse_player_side
+        domino_need_side: Say("Ambiguous move. Which end are you playing?") =C=> domino_wait_player_side
+        domino_wait_player_side: StateNode() =Hear()=> normalize_domino_side
+
+        normalize_domino_side: self.NormalizeDominoSide()
+        normalize_domino_side =OpenAITrans()=> parse_player_side
+
         parse_player_side: self.ParsePlayerSide()
         parse_player_side =D('resolved')=> say_player_move
         parse_player_side =F=> domino_bad_move
 
-        domino_bad_move: Say("I couldn't play that. Please say a legal move like 6-5 left or pass.") =C=> domino_wait_player_move
+        domino_bad_move: Say("I couldn't play that. Please try again or say pass.") =C=> domino_wait_player_move
 
         say_player_move: self.SayPlayerMove() =C=> say_domino_board_player
 
@@ -640,10 +971,16 @@ class Celeste(StateMachineProgram):
 
         say_celeste_move: self.SayCelesteMove() =C=> say_domino_board_celeste
 
-        say_domino_board_player: self.SayDominoBoard() =C=> domino_celeste_turn
-        say_domino_board_celeste: self.SayDominoBoard() =C=> domino_wait_player_move
+        say_domino_board_player: self.SayDominoBoard() =C=> check_domino_game_over
+        say_domino_board_celeste: self.SayDominoBoard() =C=> check_domino_game_over
 
-        domino_exit: Say("Okay, ending the domino game.") =C=> loop
+        check_domino_game_over: self.CheckDominoGameOver()
+        check_domino_game_over =D('over')=> domino_game_over
+        check_domino_game_over =D('to_celeste')=> domino_celeste_turn
+        check_domino_game_over =D('to_player')=> domino_wait_player_move
+
+        domino_game_over: self.DominoGameOver() =C=> loop
+        domino_exit: self.DominoExit("Okay, ending the domino game.") =C=> loop
 
         check: self.CheckResponse()
         check =D(list)=> dispatch

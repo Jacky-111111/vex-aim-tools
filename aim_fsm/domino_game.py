@@ -3,6 +3,8 @@ from __future__ import annotations
 class Domino:
     """Domino Class"""
     def __init__(self, left, right):
+        if left > 6 or right > 6:
+            raise ValueError("Domino ends must be <= 6 for a double-6 set")
         self.left = left
         self.right = right
 
@@ -13,13 +15,19 @@ class Domino:
         return self.left == value or self.right == value
 
     def __eq__(self, other):
-        return self.left == other.left and self.right == other.right
+        if not isinstance(other, Domino):
+            return False
+        return (
+            (self.left == other.left and self.right == other.right)
+            or (self.left == other.right and self.right == other.left)
+        )
 
 class Move:
     """Move Class"""
-    def __init__(self, domino, side, flipped):
+    def __init__(self, domino, anchor_domino, flipped, anchor_value=None):
         self.domino = domino
-        self.side = side
+        self.anchor_domino = anchor_domino
+        self.anchor_value = anchor_value
         self.flipped = flipped
 
     def oriented(self):
@@ -52,32 +60,33 @@ class DominoBlockGameState:
         player = player or self.current_player
         hand = self._hand(player)
         if not self.board:
-            return [Move(domino, "right", False) for domino in hand]
+            return [Move(domino, None, False) for domino in hand]
 
         left_end, right_end = self.board_ends()
         moves = []
         for domino in hand:
             if domino.matches(left_end):
                 moves.append(
-                    Move(domino, "left", flipped=(domino.left == left_end))
+                    Move(domino, self.board[0], flipped=(domino.left == left_end), anchor_value=left_end)
                 )
             if domino.matches(right_end):
                 moves.append(
-                    Move(domino, "right", flipped=(domino.right == right_end))
+                    Move(domino, self.board[-1], flipped=(domino.right == right_end), anchor_value=right_end)
                 )
         return moves
 
     def play_domino(
         self,
         domino,
-        side,
+        anchor_domino=None,
+        anchor_value=None,
         player = None,
     ):
         player = player or self.current_player
         domino = self.convert_to_domino(domino)
-        move = self._resolve_move(domino, side)
-        if move is None:
-            raise ValueError(f"Illegal move: {domino} on {side}")
+        move, side = self._resolve_move(domino, anchor_domino, anchor_value)
+        if move is None or side is None:
+            raise ValueError(f"Illegal move: {domino} next to {anchor_domino}")
 
         self.remove_from_hand(player, domino)
         oriented = move.oriented()
@@ -138,23 +147,65 @@ class DominoBlockGameState:
         # TODO: in teaching mode, also see opponent's hand
         return f"Board: {self.format_board()}\nYour hand: {self.format_hand(player='player')}"
 
-    def _resolve_move(self, domino, side):
+    def _resolve_move(self, domino, anchor_domino=None, anchor_value=None):
         if not self.board: # nothing in board right now
-            return Move(domino, side, False)
+            return Move(domino, None, False), "right"
 
+        left_domino = self.board[0]
+        right_domino = self.board[-1]
         left_end, right_end = self.board_ends()
-        if side == "left":
+
+        def resolve_left():
             if domino.right == left_end:
-                return Move(domino, "left", False)
+                return Move(domino, left_domino, False, anchor_value=left_end), "left"
             if domino.left == left_end:
-                return Move(domino, "left", True)
-            return None
-        else: # side is right
+                return Move(domino, left_domino, True, anchor_value=left_end), "left"
+            return (None, None)
+
+        def resolve_right():
             if domino.left == right_end:
-                return Move(domino, "right", False)
+                return Move(domino, right_domino, False, anchor_value=right_end), "right"
             if domino.right == right_end:
-                return Move(domino, "right", True)
-            return None
+                return Move(domino, right_domino, True, anchor_value=right_end), "right"
+            return (None, None)
+
+        if anchor_domino is not None:
+            anchor_domino = self.convert_to_domino(anchor_domino)
+            match_left = anchor_domino == left_domino
+            match_right = anchor_domino == right_domino
+            if match_left and not match_right:
+                return resolve_left()
+            if match_right and not match_left:
+                return resolve_right()
+            if match_left and match_right:
+                # Single-tile board; prefer the end value if provided.
+                if anchor_value is not None:
+                    if anchor_value == left_end and anchor_value != right_end:
+                        return resolve_left()
+                    if anchor_value == right_end and anchor_value != left_end:
+                        return resolve_right()
+                # If only one end value matches, choose it.
+                match_left_val = domino.matches(left_end)
+                match_right_val = domino.matches(right_end)
+                if match_left_val and not match_right_val:
+                    return resolve_left()
+                if match_right_val and not match_left_val:
+                    return resolve_right()
+                # Ends equal (double) or fully ambiguous; default to right.
+                if left_end == right_end:
+                    return resolve_right()
+                return (None, None)
+            return (None, None)
+
+        match_left_val = domino.matches(left_end)
+        match_right_val = domino.matches(right_end)
+        if match_left_val and not match_right_val:
+            return resolve_left()
+        if match_right_val and not match_left_val:
+            return resolve_right()
+        if left_end == right_end and match_left_val and match_right_val:
+            return resolve_right()
+        return (None, None)
 
     def _hand(self, player):
         if player == "player":

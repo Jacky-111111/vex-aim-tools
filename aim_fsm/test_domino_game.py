@@ -38,28 +38,33 @@ class DominoGameSimulationTests(unittest.TestCase):
         self.assertEqual(len(state.player_hand), 7)
         self.assertEqual(len(state.opponent_hand), 7)
 
-        state.play_domino(Domino(6, 6), "right")
+        state.play_domino(Domino(6, 6))
         self.assertEqual(state.format_board(), "[6|6]")
         self.assertEqual(len(state.player_hand), 6)
         self.assertEqual(len(state.opponent_hand), 7)
 
-        state.play_domino(Domino(6, 3), "right")
+        state.play_domino(Domino(6, 3), Domino(6, 6))
         self.assertEqual(state.format_board(), "[6|6] - [6|3]")
         self.assertEqual(state.board_ends(), (6, 3))
         self.assertEqual(len(state.player_hand), 6)
         self.assertEqual(len(state.opponent_hand), 6)
 
-        state.play_domino(Domino(6, 5), "left")
+        state.play_domino(Domino(6, 5), Domino(6, 6))
         self.assertEqual(state.format_board(), "[5|6] - [6|6] - [6|3]")
         self.assertEqual(state.board_ends(), (5, 3))
         self.assertEqual(len(state.player_hand), 5)
         self.assertEqual(len(state.opponent_hand), 6)
 
-        state.play_domino(Domino(3, 1), "right")
+        state.play_domino(Domino(3, 1), Domino(6, 3))
         self.assertEqual(state.format_board(), "[5|6] - [6|6] - [6|3] - [3|1]")
         self.assertEqual(state.board_ends(), (5, 1))
         self.assertEqual(len(state.player_hand), 5)
         self.assertEqual(len(state.opponent_hand), 5)
+
+    def test_domino_quality(self):
+        self.assertEqual(Domino(6, 3), Domino(3, 6))
+        self.assertNotEqual(Domino(6, 3), Domino(6, 4))
+        self.assertEqual(Domino(6, 6), Domino(6, 6))
 
 
 if __name__ == "__main__":
