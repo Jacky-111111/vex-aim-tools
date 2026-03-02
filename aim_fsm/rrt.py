@@ -3,6 +3,7 @@ import numpy as np
 import random
 import time
 import math
+from math import nan, isnan
 
 from .geometry import wrap_angle
 
@@ -29,15 +30,16 @@ class RRTNode():
     def __repr__(self):
         if self.q is None:
             return '<RRTNode (%.1f, %.1f)>' % (self.x, self.y)
-        elif not self.parent:
-            return '<RRTNode (%.1f, %.1f)@%d deg>' % \
-                   (self.x, self.y, round(self.q/pi*180))
+        qtext = f'{self.q:.1f}' if not isnan(self.q) else 'nan'
+        if not self.parent:
+            return '<RRTNode (%.1f, %.1f)@%s deg>' % \
+                   (self.x, self.y, qtext)
         elif self.radius is None:
-            return '<RRTNode line to (%.1f, %.1f)@%d deg>' % \
-                   (self.x, self.y, round(self.q/pi*180))
+            return '<RRTNode line to (%.1f, %.1f)@%s deg>' % \
+                   (self.x, self.y, qtext)
         else:
-            return '<RRTNode arc to (%.1f, %.1f)@%d deg, rad=%d>' % \
-                   (self.x, self.y, round(self.q/pi*180), self.radius)
+            return '<RRTNode arc to (%.1f, %.1f)@%s deg, rad=%d>' % \
+                   (self.x, self.y, qtext, self.radius)
 
 
 #---------------- RRT Path Planner ----------------
@@ -195,7 +197,7 @@ class RRT():
         self.treeA = treeA
 
         # Set up treeB with goal node(s)
-        if self.target_heading is not None:
+        if not isnan(self.target_heading):
             offset_x = goal.x
             offset_y = goal.y
             offset_goal = RRTNode(x=offset_x, y=offset_y, q=goal.q or 0)
@@ -204,7 +206,7 @@ class RRT():
                 raise GoalCollides(goal,collider,collider.obstacle_id)
             treeB = [offset_goal]
             self.treeB = treeB
-        else:  # target_heading is None
+        else:  # target_heading is nan
             treeB = [goal.copy()]
             self.treeB = treeB
             temp_goal = goal.copy()
@@ -244,16 +246,17 @@ class RRT():
             raise MaxIterations(self.max_iter)
 
     def compute_world_bounds(self,start,goal):
+        print(f'{start=}  {goal=}')
         xmin = min(start.x, goal.x)
         xmax = max(start.x, goal.x)
         ymin = min(start.y, goal.y)
         ymax = max(start.y, goal.y)
         for obst in self.obstacles:
             if isinstance(obst,Circle):
-                xmin = obst.center[0] - obst.radius
-                xmax = obst.center[0] + obst.radius
-                ymin = obst.center[1] - obst.radius
-                ymax = obst.center[1] + obst.radius
+                xmin = min(xmin, obst.center[0][0] - obst.radius)
+                xmax = max(xmax, obst.center[0][0] + obst.radius)
+                ymin = min(ymin, obst.center[1][0] - obst.radius)
+                ymax = max(ymax, obst.center[1][0] + obst.radius)
             else:
                 xmin = min(xmin, np.min(obst.vertices[0]))
                 xmax = max(xmax, np.max(obst.vertices[0]))
@@ -283,12 +286,13 @@ class RRT():
             while nodeB.parent is not None:
                 nodeB = nodeB.parent
                 (nodeB.q, prev_heading) = (prev_heading, wrap_angle((nodeB.q or 0) + pi))
-                pathB.append(nodeB.copy())
+                if not isnan(nodeB.q):
+                    pathB.append(nodeB.copy())
         (pathA,pathB) = self.join_paths(pathA,pathB)
         self.path = pathA + pathB
         self.smooth_path()
         target_q = self.target_heading
-        if target_q is not None:
+        if not isnan(target_q):
             # Last nodes turn to desired final heading
             last = self.path[-1]
             goal = RRTNode(parent=last, x=self.goal.x, y=self.goal.y, q=target_q)
@@ -307,7 +311,7 @@ class RRT():
         them with a direct link if there is no collision."""
         smoothed_path = self.path
         print('smoothing path of length', len(smoothed_path))
-        for _ in range(0,len(smoothed_path)):
+        for _ in range(0, 5*len(smoothed_path)):
             L = len(smoothed_path)
             if L <= 2: break
             i = random.randrange(0,L-2)
@@ -539,6 +543,7 @@ class RRT():
                 self.goal_obstacle = obst
             elif obst is not None:
                 obstacles.append(obst)
+        #print('generate_obstacles returned', obstacles)
         self.obstacles = obstacles
 
     @staticmethod

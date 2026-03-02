@@ -1,5 +1,5 @@
 import numpy as np
-from math import pi
+from math import pi, nan
 
 from .geometry import wrap_angle
 
@@ -168,12 +168,6 @@ class CircularKalmanFilter:
         return self.state
 
 
-def neaten(x):
-    if isinstance(x, (int,float)):
-        return round(x*10)/10
-    else:
-        return x
-
 class Pose():
     def __init__(self, x=0, y=0, z=0, theta=None, origin_id=-1):
         self.x = x
@@ -236,7 +230,7 @@ class PoseEstimate(Pose):
         #self.kf_z.predict()
         self.z = self.kf_z.update(new_pose.z)
 
-        if self.theta is not None:
+        if self.theta is not None and self.theta is not nan:
             #self.kf_theta.predict()
             self.theta = self.kf_theta.update(new_pose.theta)
 

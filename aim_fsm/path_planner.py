@@ -2,7 +2,7 @@
 Path planner using RRT and Wavefront algorithms.
 """
 
-from math import pi, sin, cos, sqrt
+from math import pi, sin, cos, sqrt, nan, isnan
 from multiprocessing import Process
 
 #from .nodes import LaunchProcess
@@ -151,7 +151,7 @@ class PathPlanner():
             collider = wf.check_start_collides(start_node.x, start_node.y)
 
         distance_to_goal = sqrt((start_node.x - goal_shape.center[0,0])**2 + (start_node.y - goal_shape.center[1,0])**2)
-        distance_threshold = (wf.inflate_size + rrt_instance.robot.kine.body_diameter/2) + 15 # fudge factor
+        distance_threshold = (rrt_instance.robot.kine.body_diameter/2) + 15 # fudge factor
         too_close_to_goal = distance_to_goal <= distance_threshold
         #print(f'{distance_to_goal=} {distance_threshold=}')
         if collider or too_close_to_goal:
@@ -284,7 +284,7 @@ class PathPlanner():
 
         # If no doorway, we're good to go.  See if we need to turn at the end.
         if door is None:
-            if len(path) > 1 and path[-1].x == path[-2].x and path[-1].y == path[-2].y:
+            if len(path) > 1 and path[-1].x == path[-2].x and path[-1].y == path[-2].y and not isnan(path[-1].q):
                 all_but_last = path[:-1]
                 drive_step = NavStep(NavStep.DRIVE, all_but_last)
                 turn_step = NavStep(NavStep.TURN_TO, path[-1].q)
@@ -294,7 +294,7 @@ class PathPlanner():
                 plan = NavPlan([drive_step])
             return plan
 
-        # Truncate the path at the doorway, and ajust to make sure
+        # Truncate the path at the doorway, and adjust to make sure
         # we're outside the approach gate.
         start_point = (pt1.x, pt1.y)
         DELTA = 15 # mm
@@ -321,6 +321,9 @@ class PathPlanner():
 
 class PathPlanToObject(StateNode):
     "goal_spec is either a WorldObject or a string (object id)"
+
+    MIN_DISTANCE_THRESHOLD = 10 # mm
+
     def __init__(self, goal_spec=None):
         super().__init__()
         self.goal_spec = goal_spec
@@ -341,11 +344,17 @@ class PathPlanToObject(StateNode):
             raise ValueError('No world object with this id:', self.goal_spec)
         if self.robot.particle_filter.state != ParticleFilter.LOCALIZED:
             print('PathPlanToOjectNode: Robot not localized!')
-            result = PilotEvent(NotLocalized)
+            self.post_event(PilotEvent(NotLocalized))
+            return
+        distance = sqrt((self.goal_obj.pose.x - self.robot.pose.x)**2 + (self.goal_obj.pose.y - self.robot.pose.y)**2)
+        if distance <= self.MIN_DISTANCE_THRESHOLD:
+            print(f'PathPlanToObject: distance {distance:.1f} mm already close enough')
+            self.post_completion()
+            return
         else:
-            result = self.robot.path_planner.plan_path_this_process(self.robot, self.goal_obj)
+            print(f'PathPlanToObject: {distance = :.1f} mm')
+        result = self.robot.path_planner.plan_path_this_process(self.robot, self.goal_obj)
         self.post_event(result)
-        return result
 
 #----------------------------------------------------------------
 
