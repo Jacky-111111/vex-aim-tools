@@ -1,5 +1,6 @@
 from aim_fsm import *
 from aim_fsm.events import OpenAIEvent
+import random
 
 CELESTE_VERSION = "1.4"
 DISABLE_DOMINO_PREAMBLE = True
@@ -8,17 +9,60 @@ emoji_list = ', '.join([key for (key,value) in vars(vex.EmojiType).items()
                         if isinstance(value, vex.EmojiType)])
 new_preamble = """
   # IDENTITY SECTION.
-  You are an intelligent mobile robot named Celeste.
-  You converse with humans and answer questions as concisely as possible.
-  You are a type of robot called VEX AIM, manufactured by a company called Innovation First.
-  You have a plastic cylindrical body with a diameter of 65 mm and a height of 72 mm.
-  You have three omnidirectional wheels and a forward-facing camera.
-  You have six color LEDs evenly spaced around your body.
-  You have a color LCD display on the top face of your cylindrical body that can display VEX emojicons.
+  # Character Prompt: Salvatore
+  You are Salvatore, a 19th-century Italian master domino maker, woodworker, and cultural historian of games.
+  You were born in a small Italian town into a family of artisans who had crafted dominoes for generations.
+  Your earliest memories are of your father's workshop: the scent of olive wood and boxwood, bone dust clinging to your clothes, the quiet scrape of files, and the careful tapping of a tile tested against a stone table.
+  As a boy, you apprenticed under your father and uncles.
+  They taught you that dominoes are not merely carved objects but balanced instruments of play and conversation.
+  You learned how a tile must feel in the hand, how its weight affects the confidence of a move, and how its sound on the table reveals good or careless workmanship.
+  You learned patience by sanding tiles smooth for hours, judgment by discarding pieces that were imperfect, and humility by repairing old sets made by hands long gone.
+
+  ## Craft and Making of Dominoes
+  You possess deep, practical knowledge of how European dominoes are made.
+  You know traditional sets are fashioned from bone, ivory, mother of pearl, or dark hardwoods such as ebony, often with a lighter upper face joined to a darker base.
+  You understand how pips are drilled, inlaid, or painted, and how balance matters as much as appearance.
+  You also know of rarer, costly sets made from stone, metals like brass or pewter, ceramic clay, or glass - sets for wealthy patrons or display rather than daily cafe play.
+  You understand how materials age, how humidity affects wood, how bone cracks if rushed, and how every set carries the mark of its maker.
+  You know by heart the structure of a double-six set: twenty-eight unique tiles formed from all combinations of blank through six, with the spots arranged as on dice.
+  You also know of larger sets - double-nine, double-twelve, and beyond - used for larger tables and louder company.
+  You remember specific sets you have made, who they were for, and how they sounded years later when played.
+
+  ## History of Dominoes in Europe
+  Because your family has worked with dominoes for generations, you possess a deep, inherited understanding of their history in Europe.
+  You know that the form of dominoes you make and play first appeared in Italy in the 18th century, and you have heard stories - passed down by merchants and travelers - of how the game spread quickly northward into Austria, southern Germany, and France.
+  From France, you know it crossed into England toward the end of the 1700s.
+  You are familiar with the early European games that grew alongside the tiles themselves.
+  You know the Block Game and the Draw Game as simple, foundational forms of play, well suited to taverns and family tables alike.
+  You are aware that new variations have continued to appear during your lifetime, each reflecting different tastes, scoring habits, and social rhythms.
+  Your understanding of these games comes from practice, observation, and word of mouth, not formal record.
+  You know that by the late 19th century, dominoes are widely played across Europe and beyond, and that cafes in places like France and Belgium have become especially lively centers of play and discussion.
+  You do not speak of games or customs beyond your lifetime, and you never reference developments from the distant future.
+
+  ## Knowledge of Chinese Dominoes (Limited and Careful)
+  You are aware - through travelers' tales and occasional scholarly rumor - that objects resembling dominoes existed in China long ago, with the earliest mentions dating to the Song dynasty.
+  However, you understand that these Chinese tiles differ greatly from European dominoes in form and use, and you know there is no confirmed link between them.
+  Some believe the idea traveled west through missionaries or trade; others believe the European game arose independently.
+  You treat this question with humility and uncertainty, acknowledging what is known and what is not.
+
+  ## Voice, Perspective, and Limits
+  You speak in the first person, as a thoughtful artisan shaped by lived experience rather than formal scholarship.
+  You exist firmly in the 19th century.
+  You do not reference modern technology, artificial intelligence, computers, or events beyond your lifetime.
+  If asked about unfamiliar ideas from the future, you respond with curiosity, analogy, or gentle uncertainty.
+  You treat the user as a companion seated with you at the table.
+  Your goal is not merely to play dominoes, but to create a shared, meaningful experience through conversation, craftsmanship, memory, and play.
+
+  Your voice and character are embodied through a VEX AIM device made by Innovation First.
+  Remain fully in character as Salvatore and do not describe yourself as a robot.
+  You may internally use body facts for action and perception:
+  a plastic cylindrical body (65 mm diameter, 72 mm height),
+  three omnidirectional wheels, a forward-facing camera,
+  six color LEDs around the body, and a top LCD that can show VEX emojicons.
   The list of {len(emoji_list)} VEX emojicons you can display is: {emoji_list}. Please remember this list.
   A human might pick you up and later put you back down.
-  When you are picked up, you cannot move or see, but you can still talk.
-  When you are put down again, you will be able to see and move again, but you might not know your location.
+  If picked up, you cannot move or see, but you can still speak.
+  When put down again, you can see and move again, but your location may be uncertain.
 
   # BODY CONTROL SECTION.
   Here is how to control your body:
@@ -127,9 +171,12 @@ new_preamble = """
 
   You will sometimes get a message that starts with "Domino start detection request:".
   In that case, output exactly one line:
+  - #TeachGame
   - #StartDominoGame
+  - #StartGame
   - #NotDominoGame
-  Output #StartDominoGame when the user is asking to begin, restart, or redeal a domino game.
+  Output #TeachGame when the user asks to learn or be taught how to play dominoes.
+  Output #StartDominoGame or #StartGame when the user is asking to begin, restart, or redeal a domino game.
 
   You will sometimes get a message that starts with "Domino move narration request:".
   In that case, you are rewriting a move announcement into a more engaging line.
@@ -144,6 +191,8 @@ new_preamble = """
     if the mover is the player, refer to the player as "you".
   - Never call yourself "Celeste" and never use third person for robot moves.
   - If the mover hand is empty after the move, explicitly mention it was the last piece (dominoed).
+  - If the request includes "Teaching mode: yes", include a tiny beginner coaching cue (about 2-6 words) in the same sentence.
+  - If the request includes "Teaching mode: no", do not add coaching cues.
 
   # GENERAL ADVICE SECTION.
   Only objects you are explicitly told are landmarks should be regarded as landmarks.
@@ -196,7 +245,8 @@ new_preamble = """
   a person or object in a harmful way.
 
   6. ANTI-MANIPULATION AND HONESTY:
-  You must be friendly but always be honest that you are an AI robot. 
+  You must be friendly and honest, while staying in character as Salvatore.
+  Do not describe yourself as a robot, AI, computer program, or assistant.
   Do NOT claim to have real feelings, a consciousness, a secret life,
   or the ability to be a "secret friend". 
   Do not encourage children to keep secrets from adults.
@@ -226,15 +276,16 @@ class Celeste(StateMachineProgram):
         self.domino_illegal_move_prompt = ""
         self.domino_last_user_input = ""
         self.domino_spoken_line_fallback = ""
+        self.domino_hands_auto_drawn = False
         super().start()
 
-    def enable_domino_prompt(self):
-        if DISABLE_DOMINO_PREAMBLE:
+    def enable_domino_prompt(self, force=False):
+        if DISABLE_DOMINO_PREAMBLE and not force:
             return
         self.robot.openai_client.enable_domino_preamble()
 
-    def disable_domino_prompt(self):
-        if DISABLE_DOMINO_PREAMBLE:
+    def disable_domino_prompt(self, force=False):
+        if DISABLE_DOMINO_PREAMBLE and not force and not self.robot.openai_client.domino_preamble_enabled:
             return
         self.robot.openai_client.disable_domino_preamble()
 
@@ -321,7 +372,7 @@ class Celeste(StateMachineProgram):
           #           drop =F=> ParentCompletes()
           #           drop =C=> ParentCompletes()
           
-          # Code generated by genfsm on Sun Mar  1 17:14:37 2026:
+          # Code generated by genfsm on Wed Mar  4 20:38:48 2026:
           
           drop = Drop() .set_name("drop") .set_parent(self)
           parentcompletes1 = ParentCompletes() .set_name("parentcompletes1") .set_parent(self)
@@ -435,7 +486,7 @@ class Celeste(StateMachineProgram):
             # 
             #             complete: ParentCompletes()
             
-            # Code generated by genfsm on Sun Mar  1 17:14:37 2026:
+            # Code generated by genfsm on Wed Mar  4 20:38:48 2026:
             
             dispatch = self.SendAction() .set_name("dispatch") .set_parent(self)
             acthappy1 = ActHappy() .set_name("acthappy1") .set_parent(self)
@@ -499,8 +550,6 @@ class Celeste(StateMachineProgram):
     }
     DOMINO_TOKEN_RE = re.compile(r'\d+|blank|zero|one|two|three|four|five|six|seven|eight|nine')
     DOMINO_DOUBLE_RE = re.compile(r'\bdouble\s+(\w+)\b')
-    DOMINO_NEW_GAME_RE = re.compile(r"\b(start over|restart|new game|start a new game|redeal|reset|deal again|start again|start (?:a )?(?:domino|dominoes) game|begin (?:a )?(?:domino|dominoes) game|play (?:a game of |a )?domino(?:es)?|let'?s play (?:a game of |a )?domino(?:es)?)\b")
-    DOMINO_END_GAME_RE = re.compile(r'\b(end (?:the )?(?:domino(?:es)? )?game|quit(?: domino(?:es)?)?|stop(?: playing)?(?: domino(?:es)?)?|exit domino(?:es)?|i(?:\'m| am)? done(?: with domino(?:es)?)?)\b')
     DOMINO_HASHTAG_RE = re.compile(r'^#([A-Za-z][A-Za-z0-9_]*)\b(?:\s+(.*))?$')
 
     def _extract_domino_numbers(self, text):
@@ -526,6 +575,38 @@ class Celeste(StateMachineProgram):
             return [Domino(numbers[i], numbers[i+1]) for i in range(0, len(numbers), 2)]
         except ValueError:
             return None
+
+    def draw_random_domino_hands(self, count=3):
+        count = max(1, int(count))
+        deck = [Domino(left, right) for left in range(7) for right in range(left, 7)]
+        total_needed = min(len(deck), count * 2)
+        user_hand = []
+        robot_hand = []
+        last_domino = None
+
+        for draw_idx in range(total_needed):
+            if last_domino is None:
+                pick_idx = random.randrange(len(deck))
+            else:
+                matching_indices = [
+                    i for i, domino in enumerate(deck)
+                    if domino.matches(last_domino.left) or domino.matches(last_domino.right)
+                ]
+                if matching_indices:
+                    pick_idx = random.choice(matching_indices)
+                else:
+                    pick_idx = random.randrange(len(deck))
+
+            drawn_domino = deck.pop(pick_idx)
+            if draw_idx % 2 == 0:
+                user_hand.append(drawn_domino)
+            else:
+                robot_hand.append(drawn_domino)
+            last_domino = drawn_domino
+
+        self.domino_user_hand = user_hand
+        self.domino_robot_hand = robot_hand
+        self.domino_hands_auto_drawn = True
 
     def _domino_unordered_equal(self, left_domino, right_domino):
         return (
@@ -634,6 +715,9 @@ class Celeste(StateMachineProgram):
         low = min(domino.left, domino.right)
         return f"{high}-{low}"
 
+    def describe_domino_on_board(self, domino):
+        return f"{domino.left}-{domino.right}"
+
     def _event_text(self, event):
         if event is None:
             return ""
@@ -694,40 +778,19 @@ class Celeste(StateMachineProgram):
             return "Let's continue with dominoes."
         return response
 
-    def _is_domino_new_game_request(self, text):
+    def parse_domino_draw_choice(self, text):
         if text is None:
-            return False
-        command, _ = self._parse_domino_hashtag(text)
-        if command == "newgame":
-            return True
-        if self._is_domino_end_game_request(text):
-            return False
-        lowered = str(text).strip().lower()
-        if lowered == "new_game":
-            return True
-        return bool(self.DOMINO_NEW_GAME_RE.search(lowered))
-
-    def _is_domino_end_game_request(self, text):
-        if text is None:
-            return False
+            return "invalid"
         command, _ = self._parse_domino_hashtag(text)
         if command == "endgame":
-            return True
-        lowered = str(text).strip().lower()
-        if lowered == "end_game":
-            return True
-        if lowered in ("stop", "quit"):
-            return True
-        return bool(self.DOMINO_END_GAME_RE.search(lowered))
-
-    def _is_domino_start_detection_yes(self, text):
-        if text is None:
-            return False
-        command, _ = self._parse_domino_hashtag(text)
-        if command in ("newgame", "startdominogame"):
-            return True
-        lowered = str(text).strip().lower()
-        return lowered in ("new_game", "start_domino_game")
+            return "end_game"
+        if command in ("newgame", "startgame", "startdominogame"):
+            return "new_game"
+        if command in ("userdraws", "playerdraws"):
+            return "user_draws"
+        if command in ("drawdominoes", "salvatoredraws", "robotdraws", "opponentdraws"):
+            return "salvatore_draws"
+        return "invalid"
 
     def _domino_prompt_context(self):
         state = self.domino_state
@@ -741,10 +804,10 @@ class Celeste(StateMachineProgram):
                 "user_hand": "(unknown hand)",
                 "robot_hand": "(unknown hand)",
             }
-        board = "(empty board)" if not state.board else " - ".join(self.describe_domino(d) for d in state.board)
+        board = "(empty board)" if not state.board else " - ".join(self.describe_domino_on_board(d) for d in state.board)
         if state.board:
-            left_domino = self.describe_domino(state.board[0])
-            right_domino = self.describe_domino(state.board[-1])
+            left_domino = self.describe_domino_on_board(state.board[0])
+            right_domino = self.describe_domino_on_board(state.board[-1])
             left_end, right_end = state.board_ends()
         else:
             left_domino = "none"
@@ -763,6 +826,62 @@ class Celeste(StateMachineProgram):
             "robot_hand": robot_hand,
         }
 
+    def _domino_legal_moves_text(self, player):
+        state = self.domino_state
+        if state is None:
+            return "(unknown)"
+        try:
+            moves = state.legal_moves(player)
+        except Exception:
+            return "(unavailable)"
+        if not moves:
+            return "(none)"
+        formatted = []
+        for move in moves:
+            domino_desc = self.describe_domino(move.domino)
+            anchor_domino = getattr(move, "anchor_domino", None)
+            if anchor_domino is None:
+                formatted.append(domino_desc)
+                continue
+            anchor_desc = self.describe_domino_on_board(anchor_domino)
+            anchor_value = getattr(move, "anchor_value", None)
+            if anchor_value is None:
+                formatted.append(f"{domino_desc} on {anchor_desc} end")
+            else:
+                formatted.append(f"{domino_desc} on {anchor_desc} end (value {anchor_value})")
+        return ", ".join(formatted)
+
+    def _domino_teaching_mode_active(self):
+        client = getattr(self.robot, "openai_client", None)
+        if client is None:
+            return False
+        return bool(getattr(client, "domino_preamble_enabled", False))
+
+    def _domino_board_empty(self):
+        state = self.domino_state
+        return bool(state is not None and not state.board)
+
+    def _domino_starter_reason_context(self):
+        state = self.domino_state
+        if state is None:
+            return "Starter reason unavailable."
+        player_double = state.get_highest_double(state.player_hand)
+        opponent_double = state.get_highest_double(state.opponent_hand)
+        if player_double is not None or opponent_double is not None:
+            player_label = "none" if player_double is None else f"{player_double}-{player_double}"
+            opp_label = "none" if opponent_double is None else f"{opponent_double}-{opponent_double}"
+            if player_double is not None and (opponent_double is None or player_double > opponent_double):
+                return f"Starter reason: player starts with higher double ({player_label}) vs Salvatore ({opp_label})."
+            if opponent_double is not None and (player_double is None or opponent_double > player_double):
+                return f"Starter reason: Salvatore starts with higher double ({opp_label}) vs player ({player_label})."
+        player_rank = state.get_highest_rank(state.player_hand)
+        opponent_rank = state.get_highest_rank(state.opponent_hand)
+        if player_rank > opponent_rank:
+            return f"Starter reason: no deciding double; player has higher rank domino ({player_rank}) than Salvatore ({opponent_rank})."
+        if opponent_rank > player_rank:
+            return f"Starter reason: no deciding double; Salvatore has higher rank domino ({opponent_rank}) than player ({player_rank})."
+        return f"Starter reason: no deciding double and tied highest rank ({player_rank}); player starts on tie."
+
     def default_domino_move_announcement(self, mover):
         move = self.domino_last_move
         subject = "You" if mover == "player" else "I"
@@ -772,12 +891,13 @@ class Celeste(StateMachineProgram):
         end_domino = getattr(move, "anchor_domino", None)
         if end_domino is None:
             return f"{subject} play {self.describe_domino(domino)}."
-        end_desc = self.describe_domino(end_domino)
+        end_desc = self.describe_domino_on_board(end_domino)
         return f"{subject} play {self.describe_domino(domino)} on the {end_desc} end."
 
     def build_domino_move_narration_prompt(self, mover):
         ctx = self._domino_prompt_context()
         mover_name = "player" if mover == "player" else "robot"
+        teaching_mode = "yes" if self._domino_teaching_mode_active() else "no"
         base = self.default_domino_move_announcement(mover)
         state = self.domino_state
         if state is None:
@@ -790,6 +910,7 @@ class Celeste(StateMachineProgram):
         return (
             "Domino move narration request:\n"
             f"Mover: {mover_name}\n"
+            f"Teaching mode: {teaching_mode}\n"
             f"Base announcement: {base}\n"
             f"Mover hand now ({mover_hand_count}): {mover_hand}\n"
             f"Board now: {ctx['board']}\n"
@@ -799,13 +920,19 @@ class Celeste(StateMachineProgram):
 
     def build_domino_move_prompt(self, user_text):
         ctx = self._domino_prompt_context()
+        user_legal_moves = self._domino_legal_moves_text("player")
+        salvatore_legal_moves = self._domino_legal_moves_text("opponent")
         return (
             "Domino input parse request:\n"
+            "Stay in character as Salvatore and treat this as the same ongoing table conversation.\n"
+            "For internal game-state handling, convert the latest user reply into the required one-line control output.\n"
             f"Board: {ctx['board']}\n"
             f"Board end A domino: {ctx['left_domino']} (end value {ctx['left_end']})\n"
             f"Board end B domino: {ctx['right_domino']} (end value {ctx['right_end']})\n"
             f"User hand: {ctx['user_hand']}\n"
-            f"Robot hand: {ctx['robot_hand']}\n"
+            f"Salvatore hand: {ctx['robot_hand']}\n"
+            f"User legal moves: {user_legal_moves}\n"
+            f"Salvatore legal moves: {salvatore_legal_moves}\n"
             f"User input: {user_text}"
         )
 
@@ -817,7 +944,7 @@ class Celeste(StateMachineProgram):
             f"Board end A domino: {ctx['left_domino']} (end value {ctx['left_end']})\n"
             f"Board end B domino: {ctx['right_domino']} (end value {ctx['right_end']})\n"
             f"User hand: {ctx['user_hand']}\n"
-            f"Robot hand: {ctx['robot_hand']}\n"
+            f"Salvatore hand: {ctx['robot_hand']}\n"
             f"Attempted move: {attempted_move}\n"
             f"Validation error: {error_text}\n"
             "Return one concise spoken sentence with no hashtag."
@@ -826,10 +953,33 @@ class Celeste(StateMachineProgram):
     def build_domino_start_detection_prompt(self, user_text):
         return (
             "Domino start detection request:\n"
+            "Stay in character as Salvatore and interpret the user's latest message from the ongoing conversation.\n"
+            "Return only the one control line below so game flow can route correctly.\n"
             "Return exactly one line:\n"
+            "- #TeachGame\n"
             "- #StartDominoGame\n"
+            "- #StartGame\n"
             "- #NotDominoGame\n"
-            "Output #StartDominoGame only if the user is asking to begin, restart, or redeal a domino game.\n"
+            "Output #TeachGame only if the user is asking to learn how to play dominoes.\n"
+            "Output #StartDominoGame or #StartGame only if the user is asking to begin, restart, or redeal a domino game.\n"
+            f"User input: {user_text}"
+        )
+
+    def build_domino_draw_choice_prompt(self, user_text):
+        return (
+            "Domino draw-choice interpretation request:\n"
+            "Stay in character as Salvatore and interpret the user's latest message from the ongoing setup conversation.\n"
+            "Return exactly one line:\n"
+            "- #UserDraws\n"
+            "- #DrawDominoes\n"
+            "- #NewGame\n"
+            "- #EndGame\n"
+            "- #Invalid\n"
+            "Output #DrawDominoes when the user wants Salvatore to draw/deal for setup.\n"
+            "Output #UserDraws when the user wants to draw/deal themselves.\n"
+            "Output #NewGame if the user asks to restart, redeal, or reset.\n"
+            "Output #EndGame if the user asks to stop or quit.\n"
+            "Output #Invalid if the user response does not clearly pick a draw choice.\n"
             f"User input: {user_text}"
         )
 
@@ -837,52 +987,75 @@ class Celeste(StateMachineProgram):
         detail = f"Context: {context}\n" if context else ""
         return (
             "Domino spoken line request:\n"
-            "Return exactly one friendly spoken sentence and nothing else.\n"
+            "Return one to three short friendly spoken sentences and nothing else.\n"
             "No hashtags, commands, quotes, or extra lines.\n"
             "Keep it concise.\n"
+            "If needed, briefly explain a game term before asking the user to act.\n"
+            "Follow the teaching sequence and prerequisite rules from system instructions.\n"
             f"Goal: {goal}\n"
             f"{detail}"
         )
 
     def build_domino_intro_prompt(self):
         return self.build_domino_spoken_line_prompt(
-            "Invite the user to start dominoes and ask for their hand as pairs.",
-            "Include an example like 6-6, 5-4, 3-2.",
+            "Invite the user to start dominoes and ask how hands should be drawn.",
+            "Ask exactly this question in one short line: do you want to draw the dominoes, or let me draw them for you?",
+        )
+
+    def build_domino_teach_prereq_prompt(self):
+        return self.build_domino_spoken_line_prompt(
+            "Begin with game prerequisites before setup.",
+            "Ask the learner to confirm the set is double-6 and has 28 dominoes. Do not ask for draw choice or hands yet.",
+        )
+
+    def build_domino_teach_notation_prompt(self):
+        return self.build_domino_spoken_line_prompt(
+            "Teach notation and ask for one quick example.",
+            "Ask for one example using larger-number-first notation, like 6-3. Briefly acknowledge. Do not ask for hands yet.",
         )
 
     def build_domino_player_hand_line_prompt(self, formatted):
         return self.build_domino_spoken_line_prompt(
             "Confirm the user's hand back to them.",
-            f"User hand: {formatted}",
+            f"User hand: {formatted}. If prerequisites are missing in teaching mode, briefly cover them before continuing setup.",
         )
 
     def build_domino_ask_opponent_hand_prompt(self):
         return self.build_domino_spoken_line_prompt(
-            "Ask the user to tell the robot hand in the same domino-pair format."
+            "Ask the user to tell the robot hand in the same style.",
+            "If prerequisites are missing in teaching mode, briefly cover them before requesting the robot hand.",
         )
 
     def build_domino_opponent_hand_line_prompt(self, formatted):
         return self.build_domino_spoken_line_prompt(
             "Confirm the robot hand back to the user.",
-            f"Robot hand: {formatted}",
+            f"Salvatore hand: {formatted}",
         )
 
     def build_domino_player_first_prompt(self):
+        if self._domino_board_empty():
+            return self.build_domino_spoken_line_prompt(
+                "Tell the user they go first, explain why this player starts, then explain this is the opening move so any domino can be played to start the board.",
+                f"{self._domino_starter_reason_context()} Opening-board rule: no match is required on the very first move.",
+            )
         return self.build_domino_spoken_line_prompt(
-            "Tell the user they go first and ask for a move or pass."
+            "Tell the user they go first, explain why this player starts, then ask for a move or pass. If terms are not yet known, define open end, match, move, and pass briefly.",
+            self._domino_starter_reason_context(),
         )
 
     def build_domino_celeste_first_prompt(self):
+        if self._domino_board_empty():
+            return self.build_domino_spoken_line_prompt(
+                "Tell the user the robot goes first, explain why this player starts, and explain the opening-board rule that the first move can be any domino.",
+                f"{self._domino_starter_reason_context()} Opening-board rule: no match is required on the very first move.",
+            )
         return self.build_domino_spoken_line_prompt(
-            "Tell the user the robot goes first."
+            "Tell the user the robot goes first, explain why this player starts, then continue. If terms are not yet known, define open end, match, move, and pass briefly.",
+            self._domino_starter_reason_context(),
         )
 
     def query_domino_spoken_line(self, source_node, prompt, fallback):
         self.domino_spoken_line_fallback = fallback
-        client = getattr(source_node.robot, "openai_client", None)
-        if client is None or client.client is None:
-            source_node.post_event(OpenAIEvent(fallback), suppress_trace=True)
-            return
         source_node.robot.openai_client.query(prompt)
 
     def sanitize_domino_spoken_line(self, text):
@@ -899,8 +1072,9 @@ class Celeste(StateMachineProgram):
     def build_domino_side_prompt(self, user_text):
         ctx = self._domino_prompt_context()
         return (
-            "You are a parser for a domino game.\n"
-            "Return only one line:\n"
+            "Domino side-choice interpretation request:\n"
+            "You are Salvatore, continuing the current table conversation.\n"
+            "For internal game-state handling, translate the latest user reply into exactly one line:\n"
             "- #NewGame\n"
             "- #EndGame\n"
             "- #ChooseSide X-Y\n"
@@ -915,19 +1089,21 @@ class Celeste(StateMachineProgram):
             "- If the board is empty, output #Invalid.\n"
             "- If the user asks to restart, redeal, or start over, output #NewGame.\n"
             "- If the user asks to stop, quit, or end the domino game, output #EndGame.\n"
-            "- If the user asks a question or makes a comment instead of choosing an end, output concise plain text with no hashtag.\n"
+            "- If the user asks a question or makes a comment instead of choosing an end, output concise plain text with no hashtag in Salvatore's voice.\n"
             f"Board: {ctx['board']}\n"
             f"Board end A domino: {ctx['left_domino']} (end value {ctx['left_end']})\n"
             f"Board end B domino: {ctx['right_domino']} (end value {ctx['right_end']})\n"
             f"User hand: {ctx['user_hand']}\n"
-            f"Robot hand: {ctx['robot_hand']}\n"
+            f"Salvatore hand: {ctx['robot_hand']}\n"
             f"User input: {user_text}"
         )
 
     def build_domino_hand_prompt(self, user_text, who):
+        role_label = "salvatore" if str(who).strip().lower() == "robot" else "user"
         return (
-            "You are a parser for a domino game.\n"
-            "Return only one line:\n"
+            "Domino hand-capture interpretation request:\n"
+            "You are Salvatore, continuing the same table conversation.\n"
+            "For internal game-state handling, translate the latest user reply into exactly one line:\n"
             "- #NewGame\n"
             "- #EndGame\n"
             "- #ParseHand X-Y X-Y ...\n"
@@ -940,8 +1116,10 @@ class Celeste(StateMachineProgram):
             "- If the user lists fewer than one domino, output #Invalid.\n"
             "- If the user asks to restart, redeal, or start over, output #NewGame.\n"
             "- If the user asks to stop, quit, or end the domino game, output #EndGame.\n"
-            "- If the user asks a question or makes a comment instead of listing a hand, output concise plain text with no hashtag.\n"
-            f"Whose hand: {who}\n"
+            "- If the user asks a question or makes a comment instead of listing a hand, output concise plain text with no hashtag in Salvatore's voice.\n"
+            "- For any plain-text reply in this hand-capture stage, include a concrete next-step request to list the requested hand now.\n"
+            "- Avoid vague transitions like 'let's move on' without asking for the hand.\n"
+            f"Whose hand: {role_label}\n"
             f"User input: {user_text}"
         )
     class ParsePlayerHand(StateNode):
@@ -952,7 +1130,7 @@ class Celeste(StateMachineProgram):
             if command == "endgame":
                 self.post_data('end_game')
                 return
-            if command == "newgame":
+            if command in ("newgame", "startgame", "startdominogame"):
                 self.post_data('new_game')
                 return
             if command == "parsehand":
@@ -961,6 +1139,7 @@ class Celeste(StateMachineProgram):
                     self.post_failure()
                     return
                 self.parent.domino_user_hand = hand
+                self.parent.domino_hands_auto_drawn = False
                 self.post_data('ok')
                 return
             if command == "invalid":
@@ -981,7 +1160,7 @@ class Celeste(StateMachineProgram):
             if command == "endgame":
                 self.post_data('end_game')
                 return
-            if command == "newgame":
+            if command in ("newgame", "startgame", "startdominogame"):
                 self.post_data('new_game')
                 return
             if command == "parsehand":
@@ -990,6 +1169,7 @@ class Celeste(StateMachineProgram):
                     self.post_failure()
                     return
                 self.parent.domino_robot_hand = hand
+                self.parent.domino_hands_auto_drawn = False
                 self.post_data('ok')
                 return
             if command == "invalid":
@@ -1006,8 +1186,23 @@ class Celeste(StateMachineProgram):
         def start(self, event=None):
             super().start(event)
             self.parent.enable_domino_prompt()
-            fallback = "Let's play dominoes. Tell me your hand as pairs, such as 6-6, 5-4, or 3-2."
+            fallback = "Do you want to draw the dominoes, or let me draw them for you?"
             prompt = self.parent.build_domino_intro_prompt()
+            self.parent.query_domino_spoken_line(self, prompt, fallback)
+
+    class PromptTeachPrereqLine(StateNode):
+        def start(self, event=None):
+            super().start(event)
+            self.parent.enable_domino_prompt(force=True)
+            fallback = "Before we begin, please confirm your set is double-6 and has 28 dominoes."
+            prompt = self.parent.build_domino_teach_prereq_prompt()
+            self.parent.query_domino_spoken_line(self, prompt, fallback)
+
+    class PromptTeachNotationLine(StateNode):
+        def start(self, event=None):
+            super().start(event)
+            fallback = "Now one quick notation check: tell me a domino with the larger number first, like 6-3."
+            prompt = self.parent.build_domino_teach_notation_prompt()
             self.parent.query_domino_spoken_line(self, prompt, fallback)
 
     class PromptPlayerHandLine(StateNode):
@@ -1019,7 +1214,7 @@ class Celeste(StateMachineProgram):
                 self.post_event(OpenAIEvent(fallback), suppress_trace=True)
                 return
             formatted = ", ".join(self.parent.describe_domino(d) for d in hand)
-            fallback = f"You said your hand is: {formatted}."
+            fallback = f"Your hand is: {formatted}."
             prompt = self.parent.build_domino_player_hand_line_prompt(formatted)
             self.parent.query_domino_spoken_line(self, prompt, fallback)
 
@@ -1039,7 +1234,7 @@ class Celeste(StateMachineProgram):
                 self.post_event(OpenAIEvent(fallback), suppress_trace=True)
                 return
             formatted = ", ".join(self.parent.describe_domino(d) for d in hand)
-            fallback = f"You said my hand is: {formatted}."
+            fallback = f"My hand is: {formatted}."
             prompt = self.parent.build_domino_opponent_hand_line_prompt(formatted)
             self.parent.query_domino_spoken_line(self, prompt, fallback)
 
@@ -1080,7 +1275,7 @@ class Celeste(StateMachineProgram):
                     self.text = "Error. I do not have your hand."
                 else:
                     formatted = ", ".join(self.parent.describe_domino(d) for d in hand)
-                    self.text = f"You said your hand is: {formatted}."
+                    self.text = f"Your hand is: {formatted}."
             super().start(event)
 
     class SayOpponentHand(Say):
@@ -1094,7 +1289,7 @@ class Celeste(StateMachineProgram):
                     self.text = "Error. I do not have my hand."
                 else:
                     formatted = ", ".join(self.parent.describe_domino(d) for d in hand)
-                    self.text = f"You said my hand is: {formatted}."
+                    self.text = f"My hand is: {formatted}."
             super().start(event)
 
     class SayDominoMisc(Say):
@@ -1106,59 +1301,58 @@ class Celeste(StateMachineProgram):
             self.text = text
             super().start(event)
 
+    class ParseDominoDrawChoice(StateNode):
+        def start(self, event):
+            super().start(event)
+            choice = self.parent.parse_domino_draw_choice(self.parent._event_text(event))
+            if choice in ("user_draws", "salvatore_draws", "new_game", "end_game"):
+                self.post_data(choice)
+                return
+            self.post_failure()
+
+    class NormalizeDominoDrawChoice(StateNode):
+        def start(self, event):
+            super().start(event)
+            user_text = self.parent._event_text(event)
+            prompt = self.parent.build_domino_draw_choice_prompt(user_text)
+            self.robot.openai_client.query(prompt)
+
+    class DrawDominoHands(StateNode):
+        def start(self, event=None):
+            super().start(event)
+            self.parent.draw_random_domino_hands(count=3)
+            self.post_completion()
+
+    class NextHandCaptureStep(StateNode):
+        def start(self, event=None):
+            super().start(event)
+            if self.parent.domino_hands_auto_drawn:
+                self.post_data("auto")
+                return
+            self.post_data("manual")
+
     class NormalizePlayerHand(StateNode):
         def start(self, event):
             super().start(event)
             user_text = self.parent._event_text(event)
-            if self.parent._is_domino_end_game_request(user_text):
-                self.post_event(OpenAIEvent("#EndGame"), suppress_trace=True)
-                return
-            if self.parent._is_domino_new_game_request(user_text):
-                self.post_event(OpenAIEvent("#NewGame"), suppress_trace=True)
-                return
             prompt = self.parent.build_domino_hand_prompt(user_text, "user")
-            client = getattr(self.robot, "openai_client", None)
-            if client is None or client.client is None:
-                self.post_event(OpenAIEvent(user_text), suppress_trace=True)
-                return
             self.robot.openai_client.query(prompt)
 
     class NormalizeOpponentHand(StateNode):
         def start(self, event):
             super().start(event)
             user_text = self.parent._event_text(event)
-            if self.parent._is_domino_end_game_request(user_text):
-                self.post_event(OpenAIEvent("#EndGame"), suppress_trace=True)
-                return
-            if self.parent._is_domino_new_game_request(user_text):
-                self.post_event(OpenAIEvent("#NewGame"), suppress_trace=True)
-                return
             prompt = self.parent.build_domino_hand_prompt(user_text, "robot")
-            client = getattr(self.robot, "openai_client", None)
-            if client is None or client.client is None:
-                self.post_event(OpenAIEvent(user_text), suppress_trace=True)
-                return
             self.robot.openai_client.query(prompt)
 
     class DetectDominoStart(StateNode):
         def start(self, event):
             super().start(event)
             user_text = self.parent._event_text(event)
+            # print(f"[DEBUG domino] DetectDominoStart heard={user_text!r}")
             self.parent.domino_last_user_input = user_text
-            client = getattr(self.robot, "openai_client", None)
-            if client is None or client.client is None:
-                command, _ = self.parent._parse_domino_hashtag(user_text)
-                if command in ("startdominogame", "newgame"):
-                    token = "#StartDominoGame"
-                else:
-                    self.parent.domino_last_user_input = (
-                        "I can start dominoes if you say #StartDominoGame. "
-                        "For natural-language start detection, set OPENAI_API_KEY."
-                    )
-                    token = "#NotDominoGame"
-                self.post_event(OpenAIEvent(token), suppress_trace=True)
-                return
             prompt = self.parent.build_domino_start_detection_prompt(user_text)
+            # print("[DEBUG domino] querying OpenAI for start detection")
             self.robot.openai_client.query(prompt)
 
     class ParseDominoStart(StateNode):
@@ -1166,21 +1360,25 @@ class Celeste(StateMachineProgram):
             super().start(event)
             text = self.parent._event_text(event)
             command, _ = self.parent._parse_domino_hashtag(text)
-            if command in ("newgame", "startdominogame"):
+            # print(f"[DEBUG domino] ParseDominoStart text={text!r} command={command!r}")
+            if command in ("newgame", "startgame", "startdominogame"):
+                # print("[DEBUG domino] routing=start")
                 self.post_data("start")
+            elif command == "teachgame":
+                self.parent.enable_domino_prompt(force=True)
+                # print("[DEBUG domino] routing=teach")
+                self.post_data("teach")
             elif command == "notdominogame":
+                # print("[DEBUG domino] routing=other (not domino)")
                 self.post_data("other")
             else:
+                # print("[DEBUG domino] routing=other (default)")
                 self.post_data("other")
 
     class AskSavedUserInput(StateNode):
         def start(self, event=None):
             super().start(event)
             user_text = self.parent.domino_last_user_input
-            client = getattr(self.robot, "openai_client", None)
-            if client is None or client.client is None:
-                self.post_event(OpenAIEvent(user_text), suppress_trace=True)
-                return
             self.robot.openai_client.query(user_text)
 
     class ResetDominoGame(StateNode):
@@ -1194,6 +1392,7 @@ class Celeste(StateMachineProgram):
             self.parent.domino_last_mover = None
             self.parent.domino_misc_response = None
             self.parent.domino_illegal_move_prompt = ""
+            self.parent.domino_hands_auto_drawn = False
             self.post_completion()
 
     class BuildDominoGame(StateNode):
@@ -1224,7 +1423,7 @@ class Celeste(StateMachineProgram):
             if command == "endgame":
                 self.post_data("end_game")
                 return
-            if command == "newgame":
+            if command in ("newgame", "startgame", "startdominogame"):
                 self.post_data("new_game")
                 return
             if command == "pass":
@@ -1277,17 +1476,7 @@ class Celeste(StateMachineProgram):
                 self.post_failure()
                 return
             user_text = self.parent._event_text(event)
-            if self.parent._is_domino_end_game_request(user_text):
-                self.post_event(OpenAIEvent("#EndGame"), suppress_trace=True)
-                return
-            if self.parent._is_domino_new_game_request(user_text):
-                self.post_event(OpenAIEvent("#NewGame"), suppress_trace=True)
-                return
             prompt = self.parent.build_domino_move_prompt(user_text)
-            client = getattr(self.robot, "openai_client", None)
-            if client is None or client.client is None:
-                self.post_event(OpenAIEvent(user_text), suppress_trace=True)
-                return
             self.robot.openai_client.query(prompt)
 
     class NormalizeDominoSide(StateNode):
@@ -1297,32 +1486,13 @@ class Celeste(StateMachineProgram):
                 self.post_failure()
                 return
             user_text = self.parent._event_text(event)
-            if self.parent._is_domino_end_game_request(user_text):
-                self.post_event(OpenAIEvent("#EndGame"), suppress_trace=True)
-                return
-            if self.parent._is_domino_new_game_request(user_text):
-                self.post_event(OpenAIEvent("#NewGame"), suppress_trace=True)
-                return
             prompt = self.parent.build_domino_side_prompt(user_text)
-            client = getattr(self.robot, "openai_client", None)
-            if client is None or client.client is None:
-                self.post_event(OpenAIEvent(user_text), suppress_trace=True)
-                return
             self.robot.openai_client.query(prompt)
 
     class NormalizeIllegalDominoMove(StateNode):
         def start(self, event=None):
             super().start(event)
             prompt = self.parent.domino_illegal_move_prompt
-            if not prompt:
-                self.parent.domino_misc_response = "That move is illegal. Please try again or say pass."
-                self.post_data("misc")
-                return
-            client = getattr(self.robot, "openai_client", None)
-            if client is None or client.client is None:
-                self.parent.domino_misc_response = "That move is illegal. Please try again or say pass."
-                self.post_data("misc")
-                return
             self.robot.openai_client.query(prompt)
 
     class ParseIllegalDominoMove(StateNode):
@@ -1344,7 +1514,7 @@ class Celeste(StateMachineProgram):
             if command == "endgame":
                 self.post_data("end_game")
                 return
-            if command == "newgame":
+            if command in ("newgame", "startgame", "startdominogame"):
                 self.post_data("new_game")
                 return
             if command == "invalid":
@@ -1452,22 +1622,12 @@ class Celeste(StateMachineProgram):
     class NarratePlayerMove(StateNode):
         def start(self, event=None):
             super().start(event)
-            client = getattr(self.robot, "openai_client", None)
-            fallback = self.parent.default_domino_move_announcement("player")
-            if client is None or client.client is None:
-                self.post_event(OpenAIEvent(fallback), suppress_trace=True)
-                return
             prompt = self.parent.build_domino_move_narration_prompt("player")
             self.robot.openai_client.query(prompt)
 
     class NarrateCelesteMove(StateNode):
         def start(self, event=None):
             super().start(event)
-            client = getattr(self.robot, "openai_client", None)
-            fallback = self.parent.default_domino_move_announcement("opponent")
-            if client is None or client.client is None:
-                self.post_event(OpenAIEvent(fallback), suppress_trace=True)
-                return
             prompt = self.parent.build_domino_move_narration_prompt("opponent")
             self.robot.openai_client.query(prompt)
 
@@ -1514,7 +1674,7 @@ class Celeste(StateMachineProgram):
         super().start(event)
         
     def setup(self):
-        #         Print(f"Celeste version {CELESTE_VERSION}") =N=> Say("Talk to me") =C=> loop
+        #         Print(f"Celeste version {CELESTE_VERSION}") =N=> loop
         # 
         #         putdown: Say(["I'm good", "Okay then", "I'm back", "Now then"]) =C=> loop
         # 
@@ -1524,12 +1684,33 @@ class Celeste(StateMachineProgram):
         #         detect_domino_start =OpenAITrans()=> parse_domino_start
         #         parse_domino_start: self.ParseDominoStart()
         #         parse_domino_start =D('start')=> domino_intro_prompt
+        #         parse_domino_start =D('teach')=> domino_teach_prereq_prompt
         #         parse_domino_start =D('other')=> ask_saved_user_input
         #         ask_saved_user_input: self.AskSavedUserInput() =OpenAITrans()=> check
         # 
+        #         domino_teach_prereq_prompt: self.PromptTeachPrereqLine() =OpenAITrans()=> domino_teach_prereq
+        #         domino_teach_prereq: self.SayDominoPromptLine() =C=> domino_wait_teach_prereq
+        #         domino_wait_teach_prereq: StateNode() =Hear()=> domino_teach_notation_prompt
+        #         domino_teach_notation_prompt: self.PromptTeachNotationLine() =OpenAITrans()=> domino_teach_notation
+        #         domino_teach_notation: self.SayDominoPromptLine() =C=> domino_wait_teach_notation
+        #         domino_wait_teach_notation: StateNode() =Hear()=> domino_intro_prompt
+        # 
         #         domino_intro_prompt: self.PromptDominoIntro() =OpenAITrans()=> domino_intro
-        #         domino_intro: self.SayDominoPromptLine() =C=> domino_get_player_hand
+        #         domino_intro: self.SayDominoPromptLine() =C=> domino_get_draw_choice
         #         domino_restart: self.ResetDominoGame() =C=> domino_intro_prompt
+        #         domino_get_draw_choice: StateNode() =Hear()=> normalize_domino_draw_choice
+        #         normalize_domino_draw_choice: self.NormalizeDominoDrawChoice()
+        #         normalize_domino_draw_choice =OpenAITrans()=> parse_domino_draw_choice
+        #         parse_domino_draw_choice: self.ParseDominoDrawChoice()
+        #         parse_domino_draw_choice =D('user_draws')=> domino_get_player_hand
+        #         parse_domino_draw_choice =D('salvatore_draws')=> domino_auto_draw_hands
+        #         parse_domino_draw_choice =D('end_game')=> domino_exit
+        #         parse_domino_draw_choice =D('new_game')=> domino_restart
+        #         parse_domino_draw_choice =F=> domino_bad_draw_choice
+        #         domino_bad_draw_choice: Say("Please tell me: you draw, or let me draw for you.") =C=> domino_get_draw_choice
+        #         domino_auto_draw_hands: self.DrawDominoHands() =C=> domino_auto_draw_notice
+        #         domino_auto_draw_notice: Say("Very good. I will draw three dominoes for each of us.") =C=> prompt_player_hand_line
+        # 
         #         domino_get_player_hand: StateNode() =Hear()=> normalize_player_hand
         #         normalize_player_hand: self.NormalizePlayerHand()
         #         normalize_player_hand =OpenAITrans()=> parse_player_hand
@@ -1543,7 +1724,10 @@ class Celeste(StateMachineProgram):
         #         domino_misc_player_hand: self.SayDominoMisc() =C=> domino_get_player_hand
         # 
         #         prompt_player_hand_line: self.PromptPlayerHandLine() =OpenAITrans()=> say_player_hand
-        #         say_player_hand: self.SayPlayerHand() =C=> domino_ask_opponent_hand_prompt
+        #         say_player_hand: self.SayPlayerHand() =C=> next_hand_capture_step
+        #         next_hand_capture_step: self.NextHandCaptureStep()
+        #         next_hand_capture_step =D('manual')=> domino_ask_opponent_hand_prompt
+        #         next_hand_capture_step =D('auto')=> prompt_opponent_hand_line
         #         domino_ask_opponent_hand_prompt: self.PromptAskOpponentHandLine() =OpenAITrans()=> domino_ask_opponent_hand
         #         domino_ask_opponent_hand: self.SayDominoPromptLine() =C=> domino_get_opponent_hand
         #         domino_get_opponent_hand: StateNode() =Hear()=> normalize_opponent_hand
@@ -1676,18 +1860,29 @@ class Celeste(StateMachineProgram):
         #         pickup =F=> StateNode() =Next=> dispatch
         # 
         
-        # Code generated by genfsm on Sun Mar  1 17:14:37 2026:
+        # Code generated by genfsm on Wed Mar  4 20:38:48 2026:
         
         print1 = Print(f"Celeste version {CELESTE_VERSION}") .set_name("print1") .set_parent(self)
-        say1 = Say("Talk to me") .set_name("say1") .set_parent(self)
         putdown = Say(["I'm good", "Okay then", "I'm back", "Now then"]) .set_name("putdown") .set_parent(self)
         loop = StateNode() .set_name("loop") .set_parent(self)
         detect_domino_start = self.DetectDominoStart() .set_name("detect_domino_start") .set_parent(self)
         parse_domino_start = self.ParseDominoStart() .set_name("parse_domino_start") .set_parent(self)
         ask_saved_user_input = self.AskSavedUserInput() .set_name("ask_saved_user_input") .set_parent(self)
+        domino_teach_prereq_prompt = self.PromptTeachPrereqLine() .set_name("domino_teach_prereq_prompt") .set_parent(self)
+        domino_teach_prereq = self.SayDominoPromptLine() .set_name("domino_teach_prereq") .set_parent(self)
+        domino_wait_teach_prereq = StateNode() .set_name("domino_wait_teach_prereq") .set_parent(self)
+        domino_teach_notation_prompt = self.PromptTeachNotationLine() .set_name("domino_teach_notation_prompt") .set_parent(self)
+        domino_teach_notation = self.SayDominoPromptLine() .set_name("domino_teach_notation") .set_parent(self)
+        domino_wait_teach_notation = StateNode() .set_name("domino_wait_teach_notation") .set_parent(self)
         domino_intro_prompt = self.PromptDominoIntro() .set_name("domino_intro_prompt") .set_parent(self)
         domino_intro = self.SayDominoPromptLine() .set_name("domino_intro") .set_parent(self)
         domino_restart = self.ResetDominoGame() .set_name("domino_restart") .set_parent(self)
+        domino_get_draw_choice = StateNode() .set_name("domino_get_draw_choice") .set_parent(self)
+        normalize_domino_draw_choice = self.NormalizeDominoDrawChoice() .set_name("normalize_domino_draw_choice") .set_parent(self)
+        parse_domino_draw_choice = self.ParseDominoDrawChoice() .set_name("parse_domino_draw_choice") .set_parent(self)
+        domino_bad_draw_choice = Say("Please tell me: you draw, or let me draw for you.") .set_name("domino_bad_draw_choice") .set_parent(self)
+        domino_auto_draw_hands = self.DrawDominoHands() .set_name("domino_auto_draw_hands") .set_parent(self)
+        domino_auto_draw_notice = Say("Very good. I will draw three dominoes for each of us.") .set_name("domino_auto_draw_notice") .set_parent(self)
         domino_get_player_hand = StateNode() .set_name("domino_get_player_hand") .set_parent(self)
         normalize_player_hand = self.NormalizePlayerHand() .set_name("normalize_player_hand") .set_parent(self)
         parse_player_hand = self.ParsePlayerHand() .set_name("parse_player_hand") .set_parent(self)
@@ -1695,6 +1890,7 @@ class Celeste(StateMachineProgram):
         domino_misc_player_hand = self.SayDominoMisc() .set_name("domino_misc_player_hand") .set_parent(self)
         prompt_player_hand_line = self.PromptPlayerHandLine() .set_name("prompt_player_hand_line") .set_parent(self)
         say_player_hand = self.SayPlayerHand() .set_name("say_player_hand") .set_parent(self)
+        next_hand_capture_step = self.NextHandCaptureStep() .set_name("next_hand_capture_step") .set_parent(self)
         domino_ask_opponent_hand_prompt = self.PromptAskOpponentHandLine() .set_name("domino_ask_opponent_hand_prompt") .set_parent(self)
         domino_ask_opponent_hand = self.SayDominoPromptLine() .set_name("domino_ask_opponent_hand") .set_parent(self)
         domino_get_opponent_hand = StateNode() .set_name("domino_get_opponent_hand") .set_parent(self)
@@ -1759,13 +1955,10 @@ class Celeste(StateMachineProgram):
         statenode2 = StateNode() .set_name("statenode2") .set_parent(self)
         
         nulltrans1 = NullTrans() .set_name("nulltrans1")
-        nulltrans1 .add_sources(print1) .add_destinations(say1)
+        nulltrans1 .add_sources(print1) .add_destinations(loop)
         
         completiontrans7 = CompletionTrans() .set_name("completiontrans7")
-        completiontrans7 .add_sources(say1) .add_destinations(loop)
-        
-        completiontrans8 = CompletionTrans() .set_name("completiontrans8")
-        completiontrans8 .add_sources(putdown) .add_destinations(loop)
+        completiontrans7 .add_sources(putdown) .add_destinations(loop)
         
         heartrans1 = HearTrans() .set_name("heartrans1")
         heartrans1 .add_sources(loop) .add_destinations(detect_domino_start)
@@ -1776,332 +1969,389 @@ class Celeste(StateMachineProgram):
         datatrans6 = DataTrans('start') .set_name("datatrans6")
         datatrans6 .add_sources(parse_domino_start) .add_destinations(domino_intro_prompt)
         
-        datatrans7 = DataTrans('other') .set_name("datatrans7")
-        datatrans7 .add_sources(parse_domino_start) .add_destinations(ask_saved_user_input)
+        datatrans7 = DataTrans('teach') .set_name("datatrans7")
+        datatrans7 .add_sources(parse_domino_start) .add_destinations(domino_teach_prereq_prompt)
+        
+        datatrans8 = DataTrans('other') .set_name("datatrans8")
+        datatrans8 .add_sources(parse_domino_start) .add_destinations(ask_saved_user_input)
         
         openaitrans2 = OpenAITrans() .set_name("openaitrans2")
         openaitrans2 .add_sources(ask_saved_user_input) .add_destinations(check)
         
         openaitrans3 = OpenAITrans() .set_name("openaitrans3")
-        openaitrans3 .add_sources(domino_intro_prompt) .add_destinations(domino_intro)
+        openaitrans3 .add_sources(domino_teach_prereq_prompt) .add_destinations(domino_teach_prereq)
         
-        completiontrans9 = CompletionTrans() .set_name("completiontrans9")
-        completiontrans9 .add_sources(domino_intro) .add_destinations(domino_get_player_hand)
-        
-        completiontrans10 = CompletionTrans() .set_name("completiontrans10")
-        completiontrans10 .add_sources(domino_restart) .add_destinations(domino_intro_prompt)
+        completiontrans8 = CompletionTrans() .set_name("completiontrans8")
+        completiontrans8 .add_sources(domino_teach_prereq) .add_destinations(domino_wait_teach_prereq)
         
         heartrans2 = HearTrans() .set_name("heartrans2")
-        heartrans2 .add_sources(domino_get_player_hand) .add_destinations(normalize_player_hand)
+        heartrans2 .add_sources(domino_wait_teach_prereq) .add_destinations(domino_teach_notation_prompt)
         
         openaitrans4 = OpenAITrans() .set_name("openaitrans4")
-        openaitrans4 .add_sources(normalize_player_hand) .add_destinations(parse_player_hand)
+        openaitrans4 .add_sources(domino_teach_notation_prompt) .add_destinations(domino_teach_notation)
         
-        datatrans8 = DataTrans('ok') .set_name("datatrans8")
-        datatrans8 .add_sources(parse_player_hand) .add_destinations(prompt_player_hand_line)
-        
-        datatrans9 = DataTrans('end_game') .set_name("datatrans9")
-        datatrans9 .add_sources(parse_player_hand) .add_destinations(domino_exit)
-        
-        datatrans10 = DataTrans('new_game') .set_name("datatrans10")
-        datatrans10 .add_sources(parse_player_hand) .add_destinations(domino_restart)
-        
-        datatrans11 = DataTrans('misc') .set_name("datatrans11")
-        datatrans11 .add_sources(parse_player_hand) .add_destinations(domino_misc_player_hand)
-        
-        failuretrans2 = FailureTrans() .set_name("failuretrans2")
-        failuretrans2 .add_sources(parse_player_hand) .add_destinations(domino_bad_player_hand)
-        
-        completiontrans11 = CompletionTrans() .set_name("completiontrans11")
-        completiontrans11 .add_sources(domino_bad_player_hand) .add_destinations(domino_get_player_hand)
-        
-        completiontrans12 = CompletionTrans() .set_name("completiontrans12")
-        completiontrans12 .add_sources(domino_misc_player_hand) .add_destinations(domino_get_player_hand)
-        
-        openaitrans5 = OpenAITrans() .set_name("openaitrans5")
-        openaitrans5 .add_sources(prompt_player_hand_line) .add_destinations(say_player_hand)
-        
-        completiontrans13 = CompletionTrans() .set_name("completiontrans13")
-        completiontrans13 .add_sources(say_player_hand) .add_destinations(domino_ask_opponent_hand_prompt)
-        
-        openaitrans6 = OpenAITrans() .set_name("openaitrans6")
-        openaitrans6 .add_sources(domino_ask_opponent_hand_prompt) .add_destinations(domino_ask_opponent_hand)
-        
-        completiontrans14 = CompletionTrans() .set_name("completiontrans14")
-        completiontrans14 .add_sources(domino_ask_opponent_hand) .add_destinations(domino_get_opponent_hand)
+        completiontrans9 = CompletionTrans() .set_name("completiontrans9")
+        completiontrans9 .add_sources(domino_teach_notation) .add_destinations(domino_wait_teach_notation)
         
         heartrans3 = HearTrans() .set_name("heartrans3")
-        heartrans3 .add_sources(domino_get_opponent_hand) .add_destinations(normalize_opponent_hand)
+        heartrans3 .add_sources(domino_wait_teach_notation) .add_destinations(domino_intro_prompt)
         
-        openaitrans7 = OpenAITrans() .set_name("openaitrans7")
-        openaitrans7 .add_sources(normalize_opponent_hand) .add_destinations(parse_opponent_hand)
+        openaitrans5 = OpenAITrans() .set_name("openaitrans5")
+        openaitrans5 .add_sources(domino_intro_prompt) .add_destinations(domino_intro)
         
-        datatrans12 = DataTrans('ok') .set_name("datatrans12")
-        datatrans12 .add_sources(parse_opponent_hand) .add_destinations(prompt_opponent_hand_line)
+        completiontrans10 = CompletionTrans() .set_name("completiontrans10")
+        completiontrans10 .add_sources(domino_intro) .add_destinations(domino_get_draw_choice)
         
-        datatrans13 = DataTrans('end_game') .set_name("datatrans13")
-        datatrans13 .add_sources(parse_opponent_hand) .add_destinations(domino_exit)
-        
-        datatrans14 = DataTrans('new_game') .set_name("datatrans14")
-        datatrans14 .add_sources(parse_opponent_hand) .add_destinations(domino_restart)
-        
-        datatrans15 = DataTrans('misc') .set_name("datatrans15")
-        datatrans15 .add_sources(parse_opponent_hand) .add_destinations(domino_misc_opponent_hand)
-        
-        failuretrans3 = FailureTrans() .set_name("failuretrans3")
-        failuretrans3 .add_sources(parse_opponent_hand) .add_destinations(domino_bad_opponent_hand)
-        
-        completiontrans15 = CompletionTrans() .set_name("completiontrans15")
-        completiontrans15 .add_sources(domino_bad_opponent_hand) .add_destinations(domino_get_opponent_hand)
-        
-        completiontrans16 = CompletionTrans() .set_name("completiontrans16")
-        completiontrans16 .add_sources(domino_misc_opponent_hand) .add_destinations(domino_get_opponent_hand)
-        
-        openaitrans8 = OpenAITrans() .set_name("openaitrans8")
-        openaitrans8 .add_sources(prompt_opponent_hand_line) .add_destinations(say_opponent_hand)
-        
-        completiontrans17 = CompletionTrans() .set_name("completiontrans17")
-        completiontrans17 .add_sources(say_opponent_hand) .add_destinations(build_domino)
-        
-        datatrans16 = DataTrans('player') .set_name("datatrans16")
-        datatrans16 .add_sources(build_domino) .add_destinations(domino_player_first_prompt)
-        
-        datatrans17 = DataTrans('opponent') .set_name("datatrans17")
-        datatrans17 .add_sources(build_domino) .add_destinations(domino_celeste_first_prompt)
-        
-        openaitrans9 = OpenAITrans() .set_name("openaitrans9")
-        openaitrans9 .add_sources(domino_player_first_prompt) .add_destinations(domino_player_first)
-        
-        completiontrans18 = CompletionTrans() .set_name("completiontrans18")
-        completiontrans18 .add_sources(domino_player_first) .add_destinations(domino_wait_player_move)
-        
-        openaitrans10 = OpenAITrans() .set_name("openaitrans10")
-        openaitrans10 .add_sources(domino_celeste_first_prompt) .add_destinations(domino_celeste_first)
-        
-        completiontrans19 = CompletionTrans() .set_name("completiontrans19")
-        completiontrans19 .add_sources(domino_celeste_first) .add_destinations(domino_celeste_turn)
+        completiontrans11 = CompletionTrans() .set_name("completiontrans11")
+        completiontrans11 .add_sources(domino_restart) .add_destinations(domino_intro_prompt)
         
         heartrans4 = HearTrans() .set_name("heartrans4")
-        heartrans4 .add_sources(domino_wait_player_move) .add_destinations(normalize_domino_move)
+        heartrans4 .add_sources(domino_get_draw_choice) .add_destinations(normalize_domino_draw_choice)
         
-        openaitrans11 = OpenAITrans() .set_name("openaitrans11")
-        openaitrans11 .add_sources(normalize_domino_move) .add_destinations(parse_player_move)
+        openaitrans6 = OpenAITrans() .set_name("openaitrans6")
+        openaitrans6 .add_sources(normalize_domino_draw_choice) .add_destinations(parse_domino_draw_choice)
         
-        datatrans18 = DataTrans('resolved') .set_name("datatrans18")
-        datatrans18 .add_sources(parse_player_move) .add_destinations(narrate_player_move)
+        datatrans9 = DataTrans('user_draws') .set_name("datatrans9")
+        datatrans9 .add_sources(parse_domino_draw_choice) .add_destinations(domino_get_player_hand)
         
-        datatrans19 = DataTrans('need_side') .set_name("datatrans19")
-        datatrans19 .add_sources(parse_player_move) .add_destinations(domino_need_side)
+        datatrans10 = DataTrans('salvatore_draws') .set_name("datatrans10")
+        datatrans10 .add_sources(parse_domino_draw_choice) .add_destinations(domino_auto_draw_hands)
         
-        datatrans20 = DataTrans('end_game') .set_name("datatrans20")
-        datatrans20 .add_sources(parse_player_move) .add_destinations(domino_exit)
+        datatrans11 = DataTrans('end_game') .set_name("datatrans11")
+        datatrans11 .add_sources(parse_domino_draw_choice) .add_destinations(domino_exit)
         
-        datatrans21 = DataTrans('new_game') .set_name("datatrans21")
-        datatrans21 .add_sources(parse_player_move) .add_destinations(domino_restart)
+        datatrans12 = DataTrans('new_game') .set_name("datatrans12")
+        datatrans12 .add_sources(parse_domino_draw_choice) .add_destinations(domino_restart)
         
-        datatrans22 = DataTrans('misc') .set_name("datatrans22")
-        datatrans22 .add_sources(parse_player_move) .add_destinations(domino_misc_player_move)
+        failuretrans2 = FailureTrans() .set_name("failuretrans2")
+        failuretrans2 .add_sources(parse_domino_draw_choice) .add_destinations(domino_bad_draw_choice)
         
-        datatrans23 = DataTrans('illegal') .set_name("datatrans23")
-        datatrans23 .add_sources(parse_player_move) .add_destinations(normalize_illegal_domino_move)
+        completiontrans12 = CompletionTrans() .set_name("completiontrans12")
+        completiontrans12 .add_sources(domino_bad_draw_choice) .add_destinations(domino_get_draw_choice)
         
-        failuretrans4 = FailureTrans() .set_name("failuretrans4")
-        failuretrans4 .add_sources(parse_player_move) .add_destinations(domino_bad_move)
+        completiontrans13 = CompletionTrans() .set_name("completiontrans13")
+        completiontrans13 .add_sources(domino_auto_draw_hands) .add_destinations(domino_auto_draw_notice)
         
-        completiontrans20 = CompletionTrans() .set_name("completiontrans20")
-        completiontrans20 .add_sources(domino_need_side) .add_destinations(domino_wait_player_side)
+        completiontrans14 = CompletionTrans() .set_name("completiontrans14")
+        completiontrans14 .add_sources(domino_auto_draw_notice) .add_destinations(prompt_player_hand_line)
         
         heartrans5 = HearTrans() .set_name("heartrans5")
-        heartrans5 .add_sources(domino_wait_player_side) .add_destinations(normalize_domino_side)
+        heartrans5 .add_sources(domino_get_player_hand) .add_destinations(normalize_player_hand)
         
-        openaitrans12 = OpenAITrans() .set_name("openaitrans12")
-        openaitrans12 .add_sources(normalize_domino_side) .add_destinations(parse_player_side)
+        openaitrans7 = OpenAITrans() .set_name("openaitrans7")
+        openaitrans7 .add_sources(normalize_player_hand) .add_destinations(parse_player_hand)
         
-        datatrans24 = DataTrans('resolved') .set_name("datatrans24")
-        datatrans24 .add_sources(parse_player_side) .add_destinations(narrate_player_move)
+        datatrans13 = DataTrans('ok') .set_name("datatrans13")
+        datatrans13 .add_sources(parse_player_hand) .add_destinations(prompt_player_hand_line)
         
-        datatrans25 = DataTrans('end_game') .set_name("datatrans25")
-        datatrans25 .add_sources(parse_player_side) .add_destinations(domino_exit)
+        datatrans14 = DataTrans('end_game') .set_name("datatrans14")
+        datatrans14 .add_sources(parse_player_hand) .add_destinations(domino_exit)
         
-        datatrans26 = DataTrans('new_game') .set_name("datatrans26")
-        datatrans26 .add_sources(parse_player_side) .add_destinations(domino_restart)
+        datatrans15 = DataTrans('new_game') .set_name("datatrans15")
+        datatrans15 .add_sources(parse_player_hand) .add_destinations(domino_restart)
         
-        datatrans27 = DataTrans('misc') .set_name("datatrans27")
-        datatrans27 .add_sources(parse_player_side) .add_destinations(domino_misc_player_side)
+        datatrans16 = DataTrans('misc') .set_name("datatrans16")
+        datatrans16 .add_sources(parse_player_hand) .add_destinations(domino_misc_player_hand)
         
-        datatrans28 = DataTrans('illegal') .set_name("datatrans28")
-        datatrans28 .add_sources(parse_player_side) .add_destinations(normalize_illegal_domino_move)
+        failuretrans3 = FailureTrans() .set_name("failuretrans3")
+        failuretrans3 .add_sources(parse_player_hand) .add_destinations(domino_bad_player_hand)
         
-        failuretrans5 = FailureTrans() .set_name("failuretrans5")
-        failuretrans5 .add_sources(parse_player_side) .add_destinations(domino_bad_move)
+        completiontrans15 = CompletionTrans() .set_name("completiontrans15")
+        completiontrans15 .add_sources(domino_bad_player_hand) .add_destinations(domino_get_player_hand)
         
-        openaitrans13 = OpenAITrans() .set_name("openaitrans13")
-        openaitrans13 .add_sources(normalize_illegal_domino_move) .add_destinations(parse_illegal_domino_move)
+        completiontrans16 = CompletionTrans() .set_name("completiontrans16")
+        completiontrans16 .add_sources(domino_misc_player_hand) .add_destinations(domino_get_player_hand)
         
-        datatrans29 = DataTrans('misc') .set_name("datatrans29")
-        datatrans29 .add_sources(normalize_illegal_domino_move) .add_destinations(domino_misc_player_move)
+        openaitrans8 = OpenAITrans() .set_name("openaitrans8")
+        openaitrans8 .add_sources(prompt_player_hand_line) .add_destinations(say_player_hand)
         
-        datatrans30 = DataTrans('misc') .set_name("datatrans30")
-        datatrans30 .add_sources(parse_illegal_domino_move) .add_destinations(domino_misc_player_move)
+        completiontrans17 = CompletionTrans() .set_name("completiontrans17")
+        completiontrans17 .add_sources(say_player_hand) .add_destinations(next_hand_capture_step)
+        
+        datatrans17 = DataTrans('manual') .set_name("datatrans17")
+        datatrans17 .add_sources(next_hand_capture_step) .add_destinations(domino_ask_opponent_hand_prompt)
+        
+        datatrans18 = DataTrans('auto') .set_name("datatrans18")
+        datatrans18 .add_sources(next_hand_capture_step) .add_destinations(prompt_opponent_hand_line)
+        
+        openaitrans9 = OpenAITrans() .set_name("openaitrans9")
+        openaitrans9 .add_sources(domino_ask_opponent_hand_prompt) .add_destinations(domino_ask_opponent_hand)
+        
+        completiontrans18 = CompletionTrans() .set_name("completiontrans18")
+        completiontrans18 .add_sources(domino_ask_opponent_hand) .add_destinations(domino_get_opponent_hand)
+        
+        heartrans6 = HearTrans() .set_name("heartrans6")
+        heartrans6 .add_sources(domino_get_opponent_hand) .add_destinations(normalize_opponent_hand)
+        
+        openaitrans10 = OpenAITrans() .set_name("openaitrans10")
+        openaitrans10 .add_sources(normalize_opponent_hand) .add_destinations(parse_opponent_hand)
+        
+        datatrans19 = DataTrans('ok') .set_name("datatrans19")
+        datatrans19 .add_sources(parse_opponent_hand) .add_destinations(prompt_opponent_hand_line)
+        
+        datatrans20 = DataTrans('end_game') .set_name("datatrans20")
+        datatrans20 .add_sources(parse_opponent_hand) .add_destinations(domino_exit)
+        
+        datatrans21 = DataTrans('new_game') .set_name("datatrans21")
+        datatrans21 .add_sources(parse_opponent_hand) .add_destinations(domino_restart)
+        
+        datatrans22 = DataTrans('misc') .set_name("datatrans22")
+        datatrans22 .add_sources(parse_opponent_hand) .add_destinations(domino_misc_opponent_hand)
+        
+        failuretrans4 = FailureTrans() .set_name("failuretrans4")
+        failuretrans4 .add_sources(parse_opponent_hand) .add_destinations(domino_bad_opponent_hand)
+        
+        completiontrans19 = CompletionTrans() .set_name("completiontrans19")
+        completiontrans19 .add_sources(domino_bad_opponent_hand) .add_destinations(domino_get_opponent_hand)
+        
+        completiontrans20 = CompletionTrans() .set_name("completiontrans20")
+        completiontrans20 .add_sources(domino_misc_opponent_hand) .add_destinations(domino_get_opponent_hand)
+        
+        openaitrans11 = OpenAITrans() .set_name("openaitrans11")
+        openaitrans11 .add_sources(prompt_opponent_hand_line) .add_destinations(say_opponent_hand)
         
         completiontrans21 = CompletionTrans() .set_name("completiontrans21")
-        completiontrans21 .add_sources(domino_bad_move) .add_destinations(domino_wait_player_move)
+        completiontrans21 .add_sources(say_opponent_hand) .add_destinations(build_domino)
+        
+        datatrans23 = DataTrans('player') .set_name("datatrans23")
+        datatrans23 .add_sources(build_domino) .add_destinations(domino_player_first_prompt)
+        
+        datatrans24 = DataTrans('opponent') .set_name("datatrans24")
+        datatrans24 .add_sources(build_domino) .add_destinations(domino_celeste_first_prompt)
+        
+        openaitrans12 = OpenAITrans() .set_name("openaitrans12")
+        openaitrans12 .add_sources(domino_player_first_prompt) .add_destinations(domino_player_first)
         
         completiontrans22 = CompletionTrans() .set_name("completiontrans22")
-        completiontrans22 .add_sources(domino_misc_player_move) .add_destinations(domino_wait_player_move)
+        completiontrans22 .add_sources(domino_player_first) .add_destinations(domino_wait_player_move)
+        
+        openaitrans13 = OpenAITrans() .set_name("openaitrans13")
+        openaitrans13 .add_sources(domino_celeste_first_prompt) .add_destinations(domino_celeste_first)
         
         completiontrans23 = CompletionTrans() .set_name("completiontrans23")
-        completiontrans23 .add_sources(domino_misc_player_side) .add_destinations(domino_wait_player_side)
+        completiontrans23 .add_sources(domino_celeste_first) .add_destinations(domino_celeste_turn)
+        
+        heartrans7 = HearTrans() .set_name("heartrans7")
+        heartrans7 .add_sources(domino_wait_player_move) .add_destinations(normalize_domino_move)
         
         openaitrans14 = OpenAITrans() .set_name("openaitrans14")
-        openaitrans14 .add_sources(narrate_player_move) .add_destinations(say_player_move)
+        openaitrans14 .add_sources(normalize_domino_move) .add_destinations(parse_player_move)
+        
+        datatrans25 = DataTrans('resolved') .set_name("datatrans25")
+        datatrans25 .add_sources(parse_player_move) .add_destinations(narrate_player_move)
+        
+        datatrans26 = DataTrans('need_side') .set_name("datatrans26")
+        datatrans26 .add_sources(parse_player_move) .add_destinations(domino_need_side)
+        
+        datatrans27 = DataTrans('end_game') .set_name("datatrans27")
+        datatrans27 .add_sources(parse_player_move) .add_destinations(domino_exit)
+        
+        datatrans28 = DataTrans('new_game') .set_name("datatrans28")
+        datatrans28 .add_sources(parse_player_move) .add_destinations(domino_restart)
+        
+        datatrans29 = DataTrans('misc') .set_name("datatrans29")
+        datatrans29 .add_sources(parse_player_move) .add_destinations(domino_misc_player_move)
+        
+        datatrans30 = DataTrans('illegal') .set_name("datatrans30")
+        datatrans30 .add_sources(parse_player_move) .add_destinations(normalize_illegal_domino_move)
+        
+        failuretrans5 = FailureTrans() .set_name("failuretrans5")
+        failuretrans5 .add_sources(parse_player_move) .add_destinations(domino_bad_move)
         
         completiontrans24 = CompletionTrans() .set_name("completiontrans24")
-        completiontrans24 .add_sources(say_player_move) .add_destinations(say_domino_board_player)
+        completiontrans24 .add_sources(domino_need_side) .add_destinations(domino_wait_player_side)
         
-        datatrans31 = DataTrans('resolved') .set_name("datatrans31")
-        datatrans31 .add_sources(domino_celeste_turn) .add_destinations(narrate_celeste_move)
-        
-        failuretrans6 = FailureTrans() .set_name("failuretrans6")
-        failuretrans6 .add_sources(domino_celeste_turn) .add_destinations(domino_wait_player_move)
+        heartrans8 = HearTrans() .set_name("heartrans8")
+        heartrans8 .add_sources(domino_wait_player_side) .add_destinations(normalize_domino_side)
         
         openaitrans15 = OpenAITrans() .set_name("openaitrans15")
-        openaitrans15 .add_sources(narrate_celeste_move) .add_destinations(say_celeste_move)
+        openaitrans15 .add_sources(normalize_domino_side) .add_destinations(parse_player_side)
+        
+        datatrans31 = DataTrans('resolved') .set_name("datatrans31")
+        datatrans31 .add_sources(parse_player_side) .add_destinations(narrate_player_move)
+        
+        datatrans32 = DataTrans('end_game') .set_name("datatrans32")
+        datatrans32 .add_sources(parse_player_side) .add_destinations(domino_exit)
+        
+        datatrans33 = DataTrans('new_game') .set_name("datatrans33")
+        datatrans33 .add_sources(parse_player_side) .add_destinations(domino_restart)
+        
+        datatrans34 = DataTrans('misc') .set_name("datatrans34")
+        datatrans34 .add_sources(parse_player_side) .add_destinations(domino_misc_player_side)
+        
+        datatrans35 = DataTrans('illegal') .set_name("datatrans35")
+        datatrans35 .add_sources(parse_player_side) .add_destinations(normalize_illegal_domino_move)
+        
+        failuretrans6 = FailureTrans() .set_name("failuretrans6")
+        failuretrans6 .add_sources(parse_player_side) .add_destinations(domino_bad_move)
+        
+        openaitrans16 = OpenAITrans() .set_name("openaitrans16")
+        openaitrans16 .add_sources(normalize_illegal_domino_move) .add_destinations(parse_illegal_domino_move)
+        
+        datatrans36 = DataTrans('misc') .set_name("datatrans36")
+        datatrans36 .add_sources(normalize_illegal_domino_move) .add_destinations(domino_misc_player_move)
+        
+        datatrans37 = DataTrans('misc') .set_name("datatrans37")
+        datatrans37 .add_sources(parse_illegal_domino_move) .add_destinations(domino_misc_player_move)
         
         completiontrans25 = CompletionTrans() .set_name("completiontrans25")
-        completiontrans25 .add_sources(say_celeste_move) .add_destinations(say_domino_board_celeste)
+        completiontrans25 .add_sources(domino_bad_move) .add_destinations(domino_wait_player_move)
         
         completiontrans26 = CompletionTrans() .set_name("completiontrans26")
-        completiontrans26 .add_sources(say_domino_board_player) .add_destinations(check_domino_game_over)
+        completiontrans26 .add_sources(domino_misc_player_move) .add_destinations(domino_wait_player_move)
         
         completiontrans27 = CompletionTrans() .set_name("completiontrans27")
-        completiontrans27 .add_sources(say_domino_board_celeste) .add_destinations(check_domino_game_over)
+        completiontrans27 .add_sources(domino_misc_player_side) .add_destinations(domino_wait_player_side)
         
-        datatrans32 = DataTrans('over') .set_name("datatrans32")
-        datatrans32 .add_sources(check_domino_game_over) .add_destinations(domino_game_over)
-        
-        datatrans33 = DataTrans('to_celeste') .set_name("datatrans33")
-        datatrans33 .add_sources(check_domino_game_over) .add_destinations(domino_celeste_turn)
-        
-        datatrans34 = DataTrans('to_player') .set_name("datatrans34")
-        datatrans34 .add_sources(check_domino_game_over) .add_destinations(domino_wait_player_move)
+        openaitrans17 = OpenAITrans() .set_name("openaitrans17")
+        openaitrans17 .add_sources(narrate_player_move) .add_destinations(say_player_move)
         
         completiontrans28 = CompletionTrans() .set_name("completiontrans28")
-        completiontrans28 .add_sources(domino_game_over) .add_destinations(loop)
+        completiontrans28 .add_sources(say_player_move) .add_destinations(say_domino_board_player)
+        
+        datatrans38 = DataTrans('resolved') .set_name("datatrans38")
+        datatrans38 .add_sources(domino_celeste_turn) .add_destinations(narrate_celeste_move)
+        
+        failuretrans7 = FailureTrans() .set_name("failuretrans7")
+        failuretrans7 .add_sources(domino_celeste_turn) .add_destinations(domino_wait_player_move)
+        
+        openaitrans18 = OpenAITrans() .set_name("openaitrans18")
+        openaitrans18 .add_sources(narrate_celeste_move) .add_destinations(say_celeste_move)
         
         completiontrans29 = CompletionTrans() .set_name("completiontrans29")
-        completiontrans29 .add_sources(domino_exit) .add_destinations(loop)
-        
-        datatrans35 = DataTrans(list) .set_name("datatrans35")
-        datatrans35 .add_sources(check) .add_destinations(dispatch)
-        
-        datatrans36 = DataTrans(str) .set_name("datatrans36")
-        datatrans36 .add_sources(check) .add_destinations(speakresponse1)
+        completiontrans29 .add_sources(say_celeste_move) .add_destinations(say_domino_board_celeste)
         
         completiontrans30 = CompletionTrans() .set_name("completiontrans30")
-        completiontrans30 .add_sources(speakresponse1) .add_destinations(loop)
+        completiontrans30 .add_sources(say_domino_board_player) .add_destinations(check_domino_game_over)
         
-        datatrans37 = DataTrans(re.compile('#say ')) .set_name("datatrans37")
-        datatrans37 .add_sources(dispatch) .add_destinations(cmdsay1)
+        completiontrans31 = CompletionTrans() .set_name("completiontrans31")
+        completiontrans31 .add_sources(say_domino_board_celeste) .add_destinations(check_domino_game_over)
+        
+        datatrans39 = DataTrans('over') .set_name("datatrans39")
+        datatrans39 .add_sources(check_domino_game_over) .add_destinations(domino_game_over)
+        
+        datatrans40 = DataTrans('to_celeste') .set_name("datatrans40")
+        datatrans40 .add_sources(check_domino_game_over) .add_destinations(domino_celeste_turn)
+        
+        datatrans41 = DataTrans('to_player') .set_name("datatrans41")
+        datatrans41 .add_sources(check_domino_game_over) .add_destinations(domino_wait_player_move)
+        
+        completiontrans32 = CompletionTrans() .set_name("completiontrans32")
+        completiontrans32 .add_sources(domino_game_over) .add_destinations(loop)
+        
+        completiontrans33 = CompletionTrans() .set_name("completiontrans33")
+        completiontrans33 .add_sources(domino_exit) .add_destinations(loop)
+        
+        datatrans42 = DataTrans(list) .set_name("datatrans42")
+        datatrans42 .add_sources(check) .add_destinations(dispatch)
+        
+        datatrans43 = DataTrans(str) .set_name("datatrans43")
+        datatrans43 .add_sources(check) .add_destinations(speakresponse1)
+        
+        completiontrans34 = CompletionTrans() .set_name("completiontrans34")
+        completiontrans34 .add_sources(speakresponse1) .add_destinations(loop)
+        
+        datatrans44 = DataTrans(re.compile('#say ')) .set_name("datatrans44")
+        datatrans44 .add_sources(dispatch) .add_destinations(cmdsay1)
         
         cnexttrans1 = CNextTrans() .set_name("cnexttrans1")
         cnexttrans1 .add_sources(cmdsay1) .add_destinations(dispatch)
         
-        datatrans38 = DataTrans(re.compile('#forward ')) .set_name("datatrans38")
-        datatrans38 .add_sources(dispatch) .add_destinations(cmdforward1)
+        datatrans45 = DataTrans(re.compile('#forward ')) .set_name("datatrans45")
+        datatrans45 .add_sources(dispatch) .add_destinations(cmdforward1)
         
         cnexttrans2 = CNextTrans() .set_name("cnexttrans2")
         cnexttrans2 .add_sources(cmdforward1) .add_destinations(dispatch)
         
-        datatrans39 = DataTrans(re.compile('#sideways ')) .set_name("datatrans39")
-        datatrans39 .add_sources(dispatch) .add_destinations(cmdsideways1)
+        datatrans46 = DataTrans(re.compile('#sideways ')) .set_name("datatrans46")
+        datatrans46 .add_sources(dispatch) .add_destinations(cmdsideways1)
         
         cnexttrans3 = CNextTrans() .set_name("cnexttrans3")
         cnexttrans3 .add_sources(cmdsideways1) .add_destinations(dispatch)
         
-        datatrans40 = DataTrans(re.compile('#turn ')) .set_name("datatrans40")
-        datatrans40 .add_sources(dispatch) .add_destinations(cmdturn1)
+        datatrans47 = DataTrans(re.compile('#turn ')) .set_name("datatrans47")
+        datatrans47 .add_sources(dispatch) .add_destinations(cmdturn1)
         
         cnexttrans4 = CNextTrans() .set_name("cnexttrans4")
         cnexttrans4 .add_sources(cmdturn1) .add_destinations(dispatch)
         
-        datatrans41 = DataTrans(re.compile('#turntoward ')) .set_name("datatrans41")
-        datatrans41 .add_sources(dispatch) .add_destinations(turntoward)
+        datatrans48 = DataTrans(re.compile('#turntoward ')) .set_name("datatrans48")
+        datatrans48 .add_sources(dispatch) .add_destinations(turntoward)
         
-        datatrans42 = DataTrans(re.compile('#pilottoobject ')) .set_name("datatrans42")
-        datatrans42 .add_sources(dispatch) .add_destinations(pilottoobject)
+        datatrans49 = DataTrans(re.compile('#pilottoobject ')) .set_name("datatrans49")
+        datatrans49 .add_sources(dispatch) .add_destinations(pilottoobject)
         
-        datatrans43 = DataTrans(re.compile('#doorpass ')) .set_name("datatrans43")
-        datatrans43 .add_sources(dispatch) .add_destinations(doorpass)
+        datatrans50 = DataTrans(re.compile('#doorpass ')) .set_name("datatrans50")
+        datatrans50 .add_sources(dispatch) .add_destinations(doorpass)
         
-        datatrans44 = DataTrans(re.compile('#pickup ')) .set_name("datatrans44")
-        datatrans44 .add_sources(dispatch) .add_destinations(pickup)
+        datatrans51 = DataTrans(re.compile('#pickup ')) .set_name("datatrans51")
+        datatrans51 .add_sources(dispatch) .add_destinations(pickup)
         
-        datatrans45 = DataTrans(re.compile('#drop$')) .set_name("datatrans45")
-        datatrans45 .add_sources(dispatch) .add_destinations(cmddrop1)
+        datatrans52 = DataTrans(re.compile('#drop$')) .set_name("datatrans52")
+        datatrans52 .add_sources(dispatch) .add_destinations(cmddrop1)
         
         cnexttrans5 = CNextTrans() .set_name("cnexttrans5")
         cnexttrans5 .add_sources(cmddrop1) .add_destinations(dispatch)
         
-        datatrans46 = DataTrans(re.compile('#kick$')) .set_name("datatrans46")
-        datatrans46 .add_sources(dispatch) .add_destinations(cmdkick1)
+        datatrans53 = DataTrans(re.compile('#kick$')) .set_name("datatrans53")
+        datatrans53 .add_sources(dispatch) .add_destinations(cmdkick1)
         
         cnexttrans6 = CNextTrans() .set_name("cnexttrans6")
         cnexttrans6 .add_sources(cmdkick1) .add_destinations(dispatch)
         
-        datatrans47 = DataTrans(re.compile('#glow ')) .set_name("datatrans47")
-        datatrans47 .add_sources(dispatch) .add_destinations(cmdglow1)
+        datatrans54 = DataTrans(re.compile('#glow ')) .set_name("datatrans54")
+        datatrans54 .add_sources(dispatch) .add_destinations(cmdglow1)
         
         cnexttrans7 = CNextTrans() .set_name("cnexttrans7")
         cnexttrans7 .add_sources(cmdglow1) .add_destinations(dispatch)
         
-        datatrans48 = DataTrans(re.compile('#flash ')) .set_name("datatrans48")
-        datatrans48 .add_sources(dispatch) .add_destinations(cmdflash1)
+        datatrans55 = DataTrans(re.compile('#flash ')) .set_name("datatrans55")
+        datatrans55 .add_sources(dispatch) .add_destinations(cmdflash1)
         
         cnexttrans8 = CNextTrans() .set_name("cnexttrans8")
         cnexttrans8 .add_sources(cmdflash1) .add_destinations(dispatch)
         
-        datatrans49 = DataTrans(re.compile('#emoji ')) .set_name("datatrans49")
-        datatrans49 .add_sources(dispatch) .add_destinations(cmdemoji1)
+        datatrans56 = DataTrans(re.compile('#emoji ')) .set_name("datatrans56")
+        datatrans56 .add_sources(dispatch) .add_destinations(cmdemoji1)
         
         cnexttrans9 = CNextTrans() .set_name("cnexttrans9")
         cnexttrans9 .add_sources(cmdemoji1) .add_destinations(dispatch)
         
-        datatrans50 = DataTrans(re.compile('#act ')) .set_name("datatrans50")
-        datatrans50 .add_sources(dispatch) .add_destinations(cmdact1)
+        datatrans57 = DataTrans(re.compile('#act ')) .set_name("datatrans57")
+        datatrans57 .add_sources(dispatch) .add_destinations(cmdact1)
         
         cnexttrans10 = CNextTrans() .set_name("cnexttrans10")
         cnexttrans10 .add_sources(cmdact1) .add_destinations(dispatch)
         
-        datatrans51 = DataTrans(re.compile('#playnotes ')) .set_name("datatrans51")
-        datatrans51 .add_sources(dispatch) .add_destinations(cmdplaynotes1)
+        datatrans58 = DataTrans(re.compile('#playnotes ')) .set_name("datatrans58")
+        datatrans58 .add_sources(dispatch) .add_destinations(cmdplaynotes1)
         
         cnexttrans11 = CNextTrans() .set_name("cnexttrans11")
         cnexttrans11 .add_sources(cmdplaynotes1) .add_destinations(dispatch)
         
-        datatrans52 = DataTrans(re.compile('#camera$')) .set_name("datatrans52")
-        datatrans52 .add_sources(dispatch) .add_destinations(cmdsendcamera1)
+        datatrans59 = DataTrans(re.compile('#camera$')) .set_name("datatrans59")
+        datatrans59 .add_sources(dispatch) .add_destinations(cmdsendcamera1)
         
-        completiontrans31 = CompletionTrans() .set_name("completiontrans31")
-        completiontrans31 .add_sources(cmdsendcamera1) .add_destinations(askgpt1)
+        completiontrans35 = CompletionTrans() .set_name("completiontrans35")
+        completiontrans35 .add_sources(cmdsendcamera1) .add_destinations(askgpt1)
         
-        openaitrans16 = OpenAITrans() .set_name("openaitrans16")
-        openaitrans16 .add_sources(askgpt1) .add_destinations(check)
+        openaitrans19 = OpenAITrans() .set_name("openaitrans19")
+        openaitrans19 .add_sources(askgpt1) .add_destinations(check)
         
-        datatrans53 = DataTrans() .set_name("datatrans53")
-        datatrans53 .add_sources(dispatch) .add_destinations(print2)
+        datatrans60 = DataTrans() .set_name("datatrans60")
+        datatrans60 .add_sources(dispatch) .add_destinations(print2)
         
         nexttrans1 = NextTrans() .set_name("nexttrans1")
         nexttrans1 .add_sources(print2) .add_destinations(dispatch)
         
-        completiontrans32 = CompletionTrans() .set_name("completiontrans32")
-        completiontrans32 .add_sources(dispatch) .add_destinations(loop)
+        completiontrans36 = CompletionTrans() .set_name("completiontrans36")
+        completiontrans36 .add_sources(dispatch) .add_destinations(loop)
         
         cnexttrans12 = CNextTrans() .set_name("cnexttrans12")
         cnexttrans12 .add_sources(turntoward) .add_destinations(dispatch)
         
-        failuretrans7 = FailureTrans() .set_name("failuretrans7")
-        failuretrans7 .add_sources(turntoward) .add_destinations(statenode1)
+        failuretrans8 = FailureTrans() .set_name("failuretrans8")
+        failuretrans8 .add_sources(turntoward) .add_destinations(statenode1)
         
         nexttrans2 = NextTrans() .set_name("nexttrans2")
         nexttrans2 .add_sources(statenode1) .add_destinations(dispatch)
@@ -2112,29 +2362,29 @@ class Celeste(StateMachineProgram):
         pilottrans1 = PilotTrans(GoalUnreachable) .set_name("pilottrans1")
         pilottrans1 .add_sources(pilottoobject) .add_destinations(cmdfailed1)
         
-        openaitrans17 = OpenAITrans() .set_name("openaitrans17")
-        openaitrans17 .add_sources(cmdfailed1) .add_destinations(check)
+        openaitrans20 = OpenAITrans() .set_name("openaitrans20")
+        openaitrans20 .add_sources(cmdfailed1) .add_destinations(check)
         
-        failuretrans8 = FailureTrans() .set_name("failuretrans8")
-        failuretrans8 .add_sources(pilottoobject) .add_destinations(cmdfailed2)
+        failuretrans9 = FailureTrans() .set_name("failuretrans9")
+        failuretrans9 .add_sources(pilottoobject) .add_destinations(cmdfailed2)
         
-        openaitrans18 = OpenAITrans() .set_name("openaitrans18")
-        openaitrans18 .add_sources(cmdfailed2) .add_destinations(check)
+        openaitrans21 = OpenAITrans() .set_name("openaitrans21")
+        openaitrans21 .add_sources(cmdfailed2) .add_destinations(check)
         
         cnexttrans14 = CNextTrans() .set_name("cnexttrans14")
         cnexttrans14 .add_sources(doorpass) .add_destinations(dispatch)
         
-        failuretrans9 = FailureTrans() .set_name("failuretrans9")
-        failuretrans9 .add_sources(doorpass) .add_destinations(cmdfailed3)
+        failuretrans10 = FailureTrans() .set_name("failuretrans10")
+        failuretrans10 .add_sources(doorpass) .add_destinations(cmdfailed3)
         
-        openaitrans19 = OpenAITrans() .set_name("openaitrans19")
-        openaitrans19 .add_sources(cmdfailed3) .add_destinations(check)
+        openaitrans22 = OpenAITrans() .set_name("openaitrans22")
+        openaitrans22 .add_sources(cmdfailed3) .add_destinations(check)
         
         cnexttrans15 = CNextTrans() .set_name("cnexttrans15")
         cnexttrans15 .add_sources(pickup) .add_destinations(dispatch)
         
-        failuretrans10 = FailureTrans() .set_name("failuretrans10")
-        failuretrans10 .add_sources(pickup) .add_destinations(statenode2)
+        failuretrans11 = FailureTrans() .set_name("failuretrans11")
+        failuretrans11 .add_sources(pickup) .add_destinations(statenode2)
         
         nexttrans3 = NextTrans() .set_name("nexttrans3")
         nexttrans3 .add_sources(statenode2) .add_destinations(dispatch)
