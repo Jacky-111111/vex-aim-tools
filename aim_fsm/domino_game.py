@@ -14,6 +14,12 @@ class Domino:
     def matches(self, value):
         return self.left == value or self.right == value
 
+    def __repr__(self):
+        return f"[{self.left}|{self.right}]"
+
+    def __str__(self):
+        return f"[{self.left}|{self.right}]"
+
     def __eq__(self, other):
         if not isinstance(other, Domino):
             return False
@@ -86,7 +92,20 @@ class DominoBlockGameState:
         domino = self.convert_to_domino(domino)
         move, side = self._resolve_move(domino, anchor_domino, anchor_value)
         if move is None or side is None:
-            raise ValueError(f"Illegal move: {domino} next to {anchor_domino}")
+            if anchor_domino is not None and self.board:
+                anchor_domino = self.convert_to_domino(anchor_domino)
+                left_end, right_end = self.board_ends()
+                if anchor_domino == self.board[0]:
+                    open_end = left_end
+                elif anchor_domino == self.board[-1]:
+                    open_end = right_end
+                else:
+                    open_end = None
+                if open_end is not None:
+                    raise ValueError(
+                        f"Illegal move: {domino} cannot connect to the open {open_end} end of {anchor_domino}"
+                    )
+            raise ValueError(f"Illegal move: {domino} has no matching open end on the board")
 
         self.remove_from_hand(player, domino)
         oriented = move.oriented()
@@ -117,8 +136,10 @@ class DominoBlockGameState:
                 return self.current_player
             if player_double > opponent_double:
                 self.current_player = "player"
+                return self.current_player
             elif opponent_double > player_double:
                 self.current_player = "opponent"
+                return self.current_player
 
         player_rank = self.get_highest_rank(self.player_hand)
         opponent_rank = self.get_highest_rank(self.opponent_hand)

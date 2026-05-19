@@ -121,6 +121,9 @@ class EventRouter:
         if not isinstance(event,Event):
             raise TypeError('%s is not an Event' % event)
         listeners = self._get_listeners(event)
+        # if type(event).__name__ in ("SpeechEvent", "OpenAIEvent"):
+        #     event_text = getattr(event, 'string', getattr(event, 'response', ''))
+        #     print(f"[DEBUG erouter] post {type(event).__name__} listeners={len(listeners)} text={event_text!r}")
         cnt = 0
         for listener in listeners:
             cnt += 1

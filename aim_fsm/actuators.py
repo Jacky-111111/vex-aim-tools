@@ -1,10 +1,12 @@
 import asyncio
 import os
+from pathlib import Path
 from math import pi
 
-from gtts import gTTS
-import google.cloud
-from google.cloud import texttospeech
+# from gtts import gTTS
+# import google.cloud
+# from google.cloud import texttospeech
+import openai
 
 import vex
 #from . import aim
@@ -134,30 +136,35 @@ class DriveActuator(Actuator):
 class SoundActuator(Actuator):
     def __init__(self, robot):
         super().__init__(robot, 'sound')
-        self.use_gcloud = True
         self.playing = False
-        self.tts_client = None
-        # Google text to speech setup:
+        self.openai_tts_client = None
+        self.openai_tts_model = 'gpt-4o-mini-tts-2025-03-20'
+        self.openai_tts_voice = 'cedar'
+        self.openai_tts_instructions = (
+            "Speak English with a very strong, unmistakable Italian accent. "
+            "Use Italian vowel timing, pronounced rolled R sounds, and Italian-style melody. "
+            "Keep delivery concise and somewhat taciturn, like an elderly Italian man. "
+            "Use a slightly higher register than typical elderly male speech. "
+            "Keep the accent going for the entire dialogue, and never default to a generic American accent."
+        )
+        self._setup_openai_tts()
+        if self.openai_tts_client is None:
+            print('No OPENAI_API_KEY provided. Speech synthesis unavailable.')
+
+        # Google/gTTS path intentionally disabled.
+        # self.google_tts_client = None
+        # self.google_tts_voice = texttospeech.VoiceSelectionParams(...)
+        # self.google_tts_audio_config = texttospeech.AudioConfig(...)
+
+    def _setup_openai_tts(self):
         try:
-            creds = getattr(google.cloud, 'api_credentials', None)
-            google_env = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-            # If no credentials, will look in GOOGLE_APPLICATION_CREDENTIALS environment var
-            if creds or google_env:
-                self.tts_client = texttospeech.TextToSpeechClient(credentials = creds)
-            self.tts_voice = texttospeech.VoiceSelectionParams(
-                language_code="en-US",
-                name="en-US-Journey-F",
-                ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
-            )
-            self.tts_audio_config = texttospeech.AudioConfig(
-                audio_encoding=texttospeech.AudioEncoding.MP3
-            )
-        except:
+            env_key = os.getenv("OPENAI_API_KEY")
+            if env_key:
+                openai.api_key = env_key
+            if openai.api_key:
+                self.openai_tts_client = openai.OpenAI(api_key=openai.api_key)
+        except Exception:
             pass
-        # Cloud text-to-speech failed; use gTTs instead
-        if self.tts_client is None:
-            print('No Google Cloud credentials. Reverting to alternate speech synthesizer.')
-            self.use_gcloud = False
 
     def status_update(self):
         if self.robot.robot0.sound.is_active():
@@ -172,6 +179,8 @@ class SoundActuator(Actuator):
                 self.complete()
 
     def say_text(self, node, text):
+        # node.post_completion()
+        # return
         self.lock(node)
         self.robot.loop.call_soon_threadsafe(self.launch_text_to_mp3, text)
 
@@ -180,23 +189,38 @@ class SoundActuator(Actuator):
 
     async def text_to_mp3(self, text):
         temp_dir = os.getenv('TEMP', '/tmp')
-        speech_file_path = os.path.join(temp_dir, 'vex_speech.mp3')
+        speech_file_path = Path(temp_dir) / 'vex_speech.mp3'
+        if self.openai_tts_client is None:
+            self.complete()
+            return
         while True:
-            if self.use_gcloud:
-                synthesis_input = texttospeech.SynthesisInput(text=text)
-                response = self.tts_client.synthesize_speech(
-                    input = synthesis_input,
-                    voice = self.tts_voice,
-                    audio_config = self.tts_audio_config
-                )
-                with open(speech_file_path, 'wb') as out:
-                    out.write(response.audio_content)
-            else:
-                tts = gTTS(text=text, lang='en')
-                tts.save(speech_file_path)
+            # if self.use_gcloud:
+            #     synthesis_input = texttospeech.SynthesisInput(text=text)
+            #     response = self.tts_client.synthesize_speech(
+            #         input=synthesis_input,
+            #         voice=self.tts_voice,
+            #         audio_config=self.tts_audio_config
+            #     )
+            #     with open(speech_file_path, 'wb') as out:
+            #         out.write(response.audio_content)
+            # else:
+            #     tts = gTTS(text=text, lang='en')
+            #     tts.save(speech_file_path)
+            try:
+                with self.openai_tts_client.audio.speech.with_streaming_response.create(
+                    model=self.openai_tts_model,
+                    voice=self.openai_tts_voice,
+                    input=text,
+                    instructions=self.openai_tts_instructions
+                ) as response:
+                    response.stream_to_file(speech_file_path)
+            except Exception as e:
+                print(f'*** OpenAI TTS failed: {e}')
+                self.complete()
+                return
             self.robot.speech_listener.pause()
             try:
-                self.robot.robot0.sound.play_local_file(speech_file_path, self.robot.sound_volume)
+                self.robot.robot0.sound.play_local_file(str(speech_file_path), self.robot.sound_volume)
             except vex.aim.InvalidSoundFileException:   # file too long
                 print("*** Speech too long. Truncating...")
                 text = text[0:len(text)//2]

@@ -66,6 +66,14 @@ class DominoGameSimulationTests(unittest.TestCase):
         self.assertNotEqual(Domino(6, 3), Domino(6, 4))
         self.assertEqual(Domino(6, 6), Domino(6, 6))
 
+    def test_who_goes_first_prefers_higher_double_over_rank(self):
+        state = DominoBlockGameState(
+            player_hand=[Domino(3, 3), Domino(1, 0), Domino(2, 1)],
+            opponent_hand=[Domino(2, 2), Domino(6, 5), Domino(4, 0)],
+            current_player="player",
+        )
+        self.assertEqual(state.who_goes_first(), "player")
+
 
 if __name__ == "__main__":
     unittest.main()

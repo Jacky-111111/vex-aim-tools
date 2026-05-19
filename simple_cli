@@ -42,6 +42,7 @@ except:
 import aim_fsm
 from aim_fsm import *
 from aim_fsm.program import runfsm as _program_runfsm
+from aim_fsm.sim_robot import BackendOnlyRobot
 
 try:
     from viewer.imshow_manager import imshow_pump
@@ -604,13 +605,33 @@ def do_shell_command(cmd):
         print(e)
 
 def do_hear_command(text):
+    running_fsm = aim_fsm.program.running_fsm
+    fsm_name = getattr(running_fsm, 'name', None) if running_fsm else None
+    fsm_class = running_fsm.__class__.__name__ if running_fsm else None
+    fsm_running = bool(getattr(running_fsm, 'running', False)) if running_fsm else False
+    # print(f"[DEBUG hear] raw={text!r} fsm={fsm_name} class={fsm_class} running={fsm_running}")
+    if not running_fsm or not running_fsm.running:
+        print('No state machine running. Use runfsm(module_name) to start one.')
+        return
+    if running_fsm.__class__ is StateMachineProgram:
+        print("No conversational FSM is loaded. Start Salvatore with runfsm('Salvatore') or launch ./simple_cli Salvatore.")
+        return
+
     utterance = text.strip().lower()
-    words = [robot.speech_listener.thesaurus.lookup_word(w) for w in utterance.split(" ")]
-    words = robot.speech_listener.thesaurus.substitute_phrases(words)
+    listener = getattr(robot, 'speech_listener', None)
+    thesaurus = getattr(listener, 'thesaurus', None)
+    if thesaurus is not None:
+        words = [thesaurus.lookup_word(w) for w in utterance.split(" ")]
+        words = thesaurus.substitute_phrases(words)
+    else:
+        words = utterance.split()
     string = " ".join(words)
+    # print(f"[DEBUG hear] normalized={string!r} words={words}")
     if len(string) == 0:
+        # print("[DEBUG hear] normalized string is empty; skipping post")
         return
     event = SpeechEvent(string, words)
+    # print(f"[DEBUG hear] posting SpeechEvent: {event}")
     robot.loop.call_soon_threadsafe(robot.erouter.post, event)
 
 ################ Set up threads and robot
@@ -633,15 +654,26 @@ if 'ROBOT' in os.environ:
     robot_address = os.environ['ROBOT']
 else:
     robot_address = "192.168.4.1"
-print(f'Connecting to {robot_address} ...')
+backend_only_flag = '--backend-only' in sys.argv[1:]
+backend_only_env = os.environ.get('CELESTE_BACKEND_ONLY', '').lower() in ('1', 'true', 'yes', 'on')
+backend_only = backend_only_flag or backend_only_env
 
-launch_speech_listener = 'ROBOT_NO_SPEECH' not in os.environ
+if backend_only:
+    print('Starting in backend-only mode (no robot connection).')
+else:
+    print(f'Connecting to {robot_address} ...')
 
-robot = Robot(loop=loop, host=robot_address,
-              launch_speech_listener=launch_speech_listener)
+launch_speech_listener = (not backend_only) and ('ROBOT_NO_SPEECH' not in os.environ)
+
+if backend_only:
+    robot = BackendOnlyRobot(loop=loop, launch_speech_listener=False)
+else:
+    robot = Robot(loop=loop, host=robot_address,
+                  launch_speech_listener=launch_speech_listener)
 evbase.robot_for_loading = robot
 
 ################ Launch
 
-file_to_run = sys.argv[1] if len(sys.argv) > 1 else None
+cli_args = [arg for arg in sys.argv[1:] if arg != '--backend-only']
+file_to_run = cli_args[0] if len(cli_args) > 0 else None
 cli_loop(robot)
