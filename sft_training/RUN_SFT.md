@@ -13,3 +13,5 @@ The current Salvatore uses the training examples in `sft_training/training_data/
 ## Step 2: Run SFT 
 After combining the JSONL files, you can run the `sft.py` file to create an SFT job. Once it's created, you should be able to see it on the OpenAI SFT dashboard (https://platform.openai.com/finetune).
 
+If you simply want to reproduce the final results, skipping Step 1 and running `python sft.py` should work. But if you want to modify the training examples, follow Step 1 first and make the necessary file name modifications to `sft.py` and `combine_jsonl.py`.
+
