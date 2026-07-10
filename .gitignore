@@ -10,3 +10,6 @@ snapshots
 .env
 *.env
 !*.env.example
+
+# Generated TTS audition audio and reports
+experiments/tts_audition/out/
