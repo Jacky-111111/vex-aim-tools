@@ -1,4 +1,5 @@
-import sys
+import os
+    import sys
 import threading
 import signal
 import numpy as np
@@ -15,6 +16,7 @@ from .actuators import *
 from .speech_rec import SpeechListener
 from .thesaurus import Thesaurus
 from .openai_client import OpenAIClient
+from .qwen_client import QwenClient
 from .aruco import *
 from .particle import SLAMParticleFilter
 from .worldmap import *
@@ -24,6 +26,10 @@ from .utils import Pose, PoseEstimate
 from .geometry import wrap_angle_deg
 from . import program
 from .pilot import DoorPass
+
+
+
+
 
 class Robot():
     def __init__(self, robot0=None, loop=None, host="192.168.4.1",
@@ -57,7 +63,17 @@ class Robot():
         self.cam_viewer = None
         self.touch = '0x00'
         self.flask_thread = None
-        self.openai_client = OpenAIClient(self)
+        backend = os.getenv("CELESTE_LLM", "openai").lower()
+        if backend == "qwen":
+            self.llm_backend = "qwen"
+            self.openai_client = QwenClient(self)
+            print(f"*** LLM backend: qwen  client={type(self.openai_client).__name__}  "
+                  f"model={self.openai_client.model}  url={self.openai_client.base_url}")
+        else:
+            self.llm_backend = "openai"
+            self.openai_client = OpenAIClient(self)
+            print(f"*** LLM backend: openai  client={type(self.openai_client).__name__}  "
+                  f"model={self.openai_client.model}")
         self.camera_image = None
         self.frame_count = 0    # camera images received so far
         self.moving_frame = 0   # last camera image when robot was moving
