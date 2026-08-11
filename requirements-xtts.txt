@@ -1,0 +1,51 @@
+# Optional local Coqui XTTS v2 stack (heavy: torch + model ~several GB).
+# Non-commercial model weights (CPML). First download requires agreeing to TOS.
+#
+# ---------------------------------------------------------------------------
+# Run Celeste with XTTS (same .venv you normally use)
+# ---------------------------------------------------------------------------
+#   source .venv/bin/activate
+#   pip install -r requirements-xtts.txt
+#   export COQUI_TOS_AGREED=1
+#   simple_cli Celeste
+#
+# Also set the active TTS provider in aim_fsm/actuators.py:
+#   TTS_API = 'xtts'
+#   TTS_VOICE = None
+#   TTS_PARAMS = {
+#       'speaker_wav': [
+#           'voices/salvatore/salvatore_ref_a.wav',
+#           'voices/salvatore/salvatore_ref_b.wav',
+#           'voices/salvatore/salvatore_ref_c.wav',
+#       ],
+#       'language': 'en',
+#       'device': 'auto',  # auto|cpu|mps|cuda
+#       'model_name': 'tts_models/multilingual/multi-dataset/xtts_v2',
+#   }
+#
+# Notes:
+# - Install into the Celeste .venv (do not use a separate env for simple_cli).
+# - First utterance loads the model and can take tens of seconds; the speech
+#   browser tab may open late. If needed, open http://127.0.0.1:51327/ manually.
+# - If PyQt fails with "Could not find ... cocoa", realign Qt packages, e.g.:
+#     pip install --force-reinstall "PyQt6==6.11.0" "PyQt6-Qt6==6.11.0"
+#
+# Smoke test (no robot):
+#   python scripts/xtts_poc.py --device auto
+#   python scripts/xtts_actuator_smoke.py
+#
+# Uninstall later (free disk; keep gTTS):
+#   pip uninstall -y coqui-tts coqui-tts-trainer coqpit-config \
+#     torch torchaudio torchcodec transformers huggingface_hub tokenizers \
+#     safetensors librosa numba llvmlite soundfile soxr matplotlib \
+#     scikit-learn scipy tensorboard tensorboard-data-server pydub pysbd \
+#     num2words inflect einops anyascii ko-speech-tools \
+#     monotonic-alignment-search
+# ---------------------------------------------------------------------------
+
+torch
+torchaudio
+torchcodec
+coqui-tts
+transformers>=4.43,<5
+pydub

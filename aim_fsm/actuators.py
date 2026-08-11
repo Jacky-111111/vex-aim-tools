@@ -264,10 +264,33 @@ class SoundActuator(Actuator):
     #   TTS_VOICE = 'alloy'   # alloy/echo/fable/onyx/nova/shimmer
     #   TTS_PARAMS = {'model': 'gpt-4o-mini-tts'}
     #
+    # Coqui XTTS v2 (local; install deps from requirements-xtts.txt):
+    #   TTS_API = 'xtts'
+    #   TTS_VOICE = None  # unused; cloning uses speaker_wav refs
+    #   TTS_PARAMS = {
+    #       'speaker_wav': [
+    #           'voices/salvatore/salvatore_ref_a.wav',
+    #           'voices/salvatore/salvatore_ref_b.wav',
+    #           'voices/salvatore/salvatore_ref_c.wav',
+    #       ],
+    #       'language': 'en',
+    #       'device': 'auto',  # auto|cpu|mps|cuda
+    #       'model_name': 'tts_models/multilingual/multi-dataset/xtts_v2',
+    #   }
+    #
     # Active selection:
-    TTS_API = 'google'
-    TTS_VOICE = 'en-US-Journey-F'
-    TTS_PARAMS = {'language_code': 'en-US'}
+    TTS_API = 'xtts'
+    TTS_VOICE = None
+    TTS_PARAMS = {
+           'speaker_wav': [
+               'voices/salvatore/salvatore_ref_a.wav',
+               'voices/salvatore/salvatore_ref_b.wav',
+               'voices/salvatore/salvatore_ref_c.wav',
+           ],
+           'language': 'en',
+           'device': 'auto',  # auto|cpu|mps|cuda
+           'model_name': 'tts_models/multilingual/multi-dataset/xtts_v2',
+       }
     # ------------------------------------------------------------------------
 
     def __init__(self, robot):
@@ -280,6 +303,9 @@ class SoundActuator(Actuator):
         # The SDK client is created lazily on first use.
         self.eleven_api_key = os.getenv('ELEVENLABS_API_KEY')
         self.eleven_client = None
+        # Coqui XTTS setup: model is loaded lazily on first use.
+        self.xtts_tts = None
+        self.xtts_device = None
         # Google text to speech setup:
         try:
             creds = getattr(google.cloud, 'api_credentials', None)
@@ -355,7 +381,7 @@ class SoundActuator(Actuator):
     def synthesize_to_file(self, text, speech_file_path):
         """Dispatch synthesis to the configured provider, with a gTTS safety net."""
         api, voice, params = self.get_tts_config()
-        if api not in (None, 'google', 'elevenlabs', 'openai'):
+        if api not in (None, 'google', 'elevenlabs', 'openai', 'xtts'):
             print(f'*** Unknown TTS_API {api!r}; using default Google/gTTS.')
             api = None
         try:
@@ -364,6 +390,9 @@ class SoundActuator(Actuator):
                 return
             if api == 'openai':
                 self.synthesize_openai(text, speech_file_path, voice, params)
+                return
+            if api == 'xtts':
+                self.synthesize_xtts(text, speech_file_path, voice, params)
                 return
             # Default: Google Cloud when credentials are available.
             if self.tts_client is not None:
@@ -431,6 +460,99 @@ class SoundActuator(Actuator):
             model=model, voice=voice_name, input=text
         ) as response:
             response.stream_to_file(speech_file_path)
+
+    def _repo_root(self):
+        # aim_fsm/actuators.py -> repo root
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+
+    def _resolve_speaker_wavs(self, speaker_wav):
+        if not speaker_wav:
+            raise RuntimeError('XTTS requires TTS_PARAMS["speaker_wav"] reference audio')
+        if isinstance(speaker_wav, str):
+            speaker_wav = [speaker_wav]
+        resolved = []
+        root = self._repo_root()
+        for path in speaker_wav:
+            path = os.path.expanduser(path)
+            if not os.path.isabs(path):
+                path = os.path.join(root, path)
+            if not os.path.isfile(path):
+                raise RuntimeError(f'XTTS speaker_wav not found: {path}')
+            resolved.append(path)
+        return resolved
+
+    def _pick_xtts_device(self, requested):
+        requested = (requested or 'auto').lower()
+        if requested != 'auto':
+            return requested
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return 'cuda'
+            if getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
+                return 'mps'
+        except Exception:
+            pass
+        return 'cpu'
+
+    def _ensure_xtts(self, params):
+        os.environ.setdefault('COQUI_TOS_AGREED', '1')
+        os.environ.setdefault('PYTORCH_ENABLE_MPS_FALLBACK', '1')
+        device = self._pick_xtts_device(params.get('device', 'auto'))
+        model_name = params.get('model_name', 'tts_models/multilingual/multi-dataset/xtts_v2')
+        if self.xtts_tts is not None and self.xtts_device == device:
+            return self.xtts_tts
+        try:
+            from TTS.api import TTS
+        except ImportError as e:
+            raise RuntimeError(
+                'Coqui XTTS unavailable. Install with the xtts venv / requirements-xtts.txt'
+            ) from e
+        print(f'Loading Coqui XTTS model on {device}...')
+        tts = TTS(model_name).to(device)
+        self.xtts_tts = tts
+        self.xtts_device = device
+        return tts
+
+    def _wav_to_mp3(self, wav_path, mp3_path):
+        try:
+            from pydub import AudioSegment
+            AudioSegment.from_wav(wav_path).export(mp3_path, format='mp3')
+            return
+        except Exception:
+            pass
+        import subprocess
+        subprocess.run(
+            ['ffmpeg', '-y', '-i', wav_path, mp3_path],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def synthesize_xtts(self, text, speech_file_path, voice, params):
+        params = params or dict()
+        speaker_wav = self._resolve_speaker_wavs(
+            params.get('speaker_wav') or voice
+        )
+        language = params.get('language', 'en')
+        tts = self._ensure_xtts(params)
+        # Robot playback expects mp3; synthesize wav then convert when needed.
+        root, ext = os.path.splitext(speech_file_path)
+        want_mp3 = ext.lower() == '.mp3'
+        wav_path = speech_file_path if not want_mp3 else (root + '.xtts.wav')
+        tts.tts_to_file(
+            text=text,
+            speaker_wav=speaker_wav,
+            language=language,
+            file_path=wav_path,
+            split_sentences=params.get('split_sentences', True),
+        )
+        if want_mp3:
+            self._wav_to_mp3(wav_path, speech_file_path)
+            try:
+                os.remove(wav_path)
+            except OSError:
+                pass
 
     def play_sound(self, node, sound):
         self.lock(node)

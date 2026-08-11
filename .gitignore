@@ -4,3 +4,5 @@ notes.txt
 snapshots
 *.py.old
 .DS_Store
+.venvs/
+tmp_xtts_out/
